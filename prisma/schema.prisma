@@ -1,0 +1,882 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+
+model Department {
+  id        String   @id @default(cuid())
+  name      String
+  code      String   @unique
+  headId    String?
+  users     User[]
+  assets    Asset[]
+}
+
+model Location {
+  id                 String                  @id @default(cuid())
+  code               String?                 @unique              // Kode ruangan: R-201, STUDIO-A
+  name               String                  @default("")         // Nama resmi ruangan
+  building           String
+  floor              String?
+  room               String?
+  area               Float?                  // luas ruangan dalam m²
+  capacity           Int?                    // kapasitas maksimal orang
+  price              Float?                  // tarif sewa/usage fee per hari (legacy)
+  pricePerHour       Float?                  // tarif sewa per jam
+  pricePerDay        Float?                  // tarif sewa per hari
+  depositAmount      Float?                  // nominal deposit jaminan (refundable)
+  description        String?                 @db.Text        // deskripsi & aturan penggunaan ruangan
+  status             String                  @default("AVAILABLE") // AVAILABLE, RENTED, MAINTENANCE, INACTIVE
+  facilities         String                  @db.Text // JSON string array of fasilitas ruangan
+  photos             String                  @db.Text // JSON string array of foto ruangan
+  assets             Asset[]
+  roomBookings       RoomBooking[]
+  availabilityBlocks RoomAvailabilityBlock[]
+  maintenance        Maintenance[]
+  maintenanceSchedules MaintenanceSchedule[] @relation("LocationMaintenanceSchedules")
+}
+
+model Category {
+  id               String   @id @default(cuid())
+  name             String   @unique
+  depreciationRate Float?   // % per tahun
+  usefulLifeYears  Int?
+  assets           Asset[]
+  checklistTemplates ChecklistTemplate[]
+  maintenanceSchedules MaintenanceSchedule[]
+}
+
+model Asset {
+  id                 String              @id @default(cuid())
+  code               String              @unique
+  name               String
+  description        String?             @db.Text
+  categoryId         String
+  category           Category            @relation(fields: [categoryId], references: [id])
+  locationId         String?
+  location           Location?           @relation(fields: [locationId], references: [id])
+  departmentId       String?
+  department         Department?         @relation(fields: [departmentId], references: [id])
+  status             String              @default("AVAILABLE") // AVAILABLE, BORROWED, RENTED, INSTALLED, MAINTENANCE, DAMAGED, DISPOSED
+  condition          String?             // Baik, Rusak Ringan, Rusak Berat
+  quantity           Int                 @default(1)
+  availableQty       Int                 @default(1)
+  purchaseDate       DateTime?
+  purchaseCost       Float?
+  currentValue       Float?
+  serialNumber       String?
+  brand              String?
+  images             String              @db.Text
+  qrToken            String              @unique @default(cuid())
+  qrImageUrl         String?
+  dailyRentRate      Float?              // Tarif sewa per hari (aset satuan)
+  sessionRentRate    Float?              // Tarif sewa per sesi (untuk add-on booking ruangan)
+  isRentable         Boolean             @default(false)
+  isLoanable         Boolean             @default(true)
+  isFixedToRoom      Boolean             @default(false) // true = Aset Terikat Ruangan, false = Aset Bergerak
+  diasuransikan      Boolean             @default(false)
+  noPolis            String?
+  checklistItems     String              @db.Text // JSON array kelengkapan
+  monthlyDepreciation Float?             // Nominal penyusutan nilai buku bulanan (Rp)
+  lastDepreciationDate DateTime?          // Tanggal akumulasi depresiasi terakhir
+  salvageValue       Float?              // Nilai sisa aset saat penghapusan (Rp)
+  disposalReason     String?             @db.Text // Alasan pemutihan/penghapusan
+  disposalDocUrl     String?             @db.Text // Berita Acara Penghapusan PDF/Dokumen
+  loans              Loan[]
+  rentals            Rental[]
+  maintenance        Maintenance[]
+  maintenanceSchedules MaintenanceSchedule[] @relation("AssetMaintenanceSchedules")
+  transfers          TransferLog[]
+  bookingAddons      BookingAddonAsset[]
+  bookingInspections BookingInspection[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @default(now()) @updatedAt
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  password     String
+  role         String        @default("BORROWER") // SUPER_ADMIN, ADMIN, APPROVER, STAFF, BORROWER
+  renterCategory String      @default("EXTERNAL") // EXTERNAL, MAHASISWA, INTERNAL_KAMPUS
+  phone        String?
+  identityNo   String?       // NIP/NIM/NIK
+  departmentId String?
+  department   Department?   @relation(fields: [departmentId], references: [id])
+  isSuspended  Boolean       @default(false)
+  avatarUrl    String?       @db.Text
+  address      String?       @db.Text
+  gender       String?       // Laki-laki / Perempuan
+  birthDate    DateTime?
+  birthPlace   String?
+  residence    String?
+  loans        Loan[]
+  approvals    Approval[]
+  activityLogs ActivityLog[]
+  inspections  ReturnInspection[]
+  auditLogs    AuditLog[]
+  notifications InAppNotification[]
+  violations   Violation[]
+  assetClaims  AssetClaim[]
+  assetRatings AssetRating[]
+  verificationRequests VerificationRequest[] @relation("userRequests")
+  decidedRequests      VerificationRequest[] @relation("decidedRequests")
+  consentLogs          ConsentLog[]
+  // CRM relations
+  blacklistRecords     BlacklistRecord[]
+  memberCard           MemberCard?
+  groupMemberships     BorrowerGroupMember[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @default(now()) @updatedAt
+}
+
+model Loan {
+  id           String       @id @default(cuid())
+  ticketNumber String       @unique
+  userId       String
+  user         User         @relation(fields: [userId], references: [id])
+  assetId      String
+  asset        Asset        @relation(fields: [assetId], references: [id])
+  quantity     Int          @default(1)
+  purpose      String      @db.Text
+  startDate    DateTime
+  endDate      DateTime
+  checkInTime  DateTime?
+  checkOutTime DateTime?
+  status       String       @default("DRAFT") // DRAFT, PENDING_L1, PENDING_L2, APPROVED, REJECTED, ACTIVE, RETURNED, OVERDUE
+  condition    String?
+  penaltyFee         Float?       @default(0)
+  penaltyPaidAmount  Float?       @default(0)
+  penaltyStatus      String       @default("UNPAID") // UNPAID, PARTIAL, PAID, CANCELLED
+  permitPdfUrl String?
+  notes        String?      @db.Text
+  activityType String       @default("PERSONAL") // INSTITUTION, ORGANIZATION, PERSONAL
+  consentLogs  ConsentLog[]
+  approvals        Approval[]
+  checkInLogs      CheckInLog[]
+  returnInspection ReturnInspection?
+  assetClaim       AssetClaim?
+  handoverLog      HandoverLog?
+  rating           AssetRating?
+  operatorId       String?
+  operator         Operator?    @relation(fields: [operatorId], references: [id])
+  operatorFee      Float?       @default(0)
+  createdAt        DateTime     @default(now())
+}
+
+model Approval {
+  id         String    @id @default(cuid())
+  loanId     String
+  loan       Loan      @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  approverId String
+  approver   User      @relation(fields: [approverId], references: [id])
+  level      Int
+  status     String    // APPROVED, REJECTED
+  notes      String?
+  decidedAt  DateTime  @default(now())
+}
+
+model CheckInLog {
+  id        String    @id @default(cuid())
+  loanId    String
+  loan      Loan      @relation(fields: [loanId], references: [id])
+  scannedBy String
+  type      String    // CHECK_IN, CHECK_OUT
+  timestamp DateTime  @default(now())
+  condition String
+  notes     String?   @db.Text
+}
+
+model Rental {
+  id            String    @id @default(cuid())
+  bookingNumber String    @unique
+  assetId       String
+  asset         Asset     @relation(fields: [assetId], references: [id])
+  renterId      String
+  renter        Renter    @relation(fields: [renterId], references: [id])
+  quantity      Int       @default(1)
+  startDate     DateTime
+  endDate       DateTime
+  totalDays     Int
+  ratePerDay    Float
+  totalAmount   Float
+  depositAmount Float     @default(0)
+  payStatus     String    @default("UNPAID") // UNPAID, DOWN_PAYMENT, PAID, REFUNDED
+  payMethod     String?
+  receiptPdfUrl String?
+  paymentProofUrl String? @db.Text
+  supportingDocUrl String? @db.Text        // Berkas Surat Tugas / Proposal / KTP
+  rentalType    String    @default("DAILY") // DAILY, HOURLY
+  penaltyFee         Float?       @default(0)
+  penaltyPaidAmount  Float?       @default(0)
+  penaltyStatus      String       @default("UNPAID") // UNPAID, PARTIAL, PAID, CANCELLED
+  notes         String?   @db.Text
+  masterInvoiceId String?
+  masterInvoice   MasterInvoice? @relation(fields: [masterInvoiceId], references: [id])
+  operatorId    String?
+  operator      Operator? @relation(fields: [operatorId], references: [id])
+  operatorFee   Float?    @default(0)
+  createdAt     DateTime  @default(now())
+}
+
+model Renter {
+  id           String        @id @default(cuid())
+  name         String
+  phone        String
+  email        String?
+  idCardNo     String?
+  address      String?
+  rentals      Rental[]
+  roomBookings RoomBooking[]
+  masterInvoices MasterInvoice[]
+  createdAt    DateTime      @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────
+// MODEL BARU: Sistem Sewa Ruangan & Inventaris Terintegrasi
+// ─────────────────────────────────────────────────────────────
+
+model RoomBooking {
+  id            String              @id @default(cuid())
+  bookingNumber String              @unique             // BK-2026-001
+  locationId    String
+  location      Location            @relation(fields: [locationId], references: [id])
+  renterId      String
+  renter        Renter              @relation(fields: [renterId], references: [id])
+  startTime     DateTime                                // Tanggal & jam mulai sewa
+  endTime       DateTime                                // Tanggal & jam selesai sewa
+  durationHours Float?                                  // Durasi dalam jam
+  roomRate      Float                                   // Tarif ruangan yang dipakai (per jam atau per hari)
+  roomSubtotal  Float                                   // Biaya sewa ruangan
+  addonSubtotal Float               @default(0)         // Total biaya add-on alat
+  totalAmount   Float                                   // Grand total
+  depositAmount Float               @default(0)         // Deposit jaminan ditahan
+  bookingStatus String              @default("PENDING") // PENDING, CONFIRMED, ACTIVE, COMPLETED, COMPLETED_WITH_CLAIM, CANCELLED, OVERDUE
+  payStatus     String              @default("UNPAID")  // UNPAID, DOWN_PAYMENT, PAID, REFUNDED, CLAIMED
+  renterCategory String              @default("MAHASISWA") // MAHASISWA, EXTERNAL_PINJAM, EXTERNAL_SEWA
+  payMethod     String?                                 // Cash, Transfer, QRIS
+  paymentScheme String              @default("FULL")    // FULL, DOWN_PAYMENT
+  paymentExpiredAt DateTime?                            // Batas waktu pembayaran (otomatis +24 jam)
+  rentalType    String              @default("HOURLY")  // HOURLY (per jam) / DAILY (per hari)
+  supportingDocUrl String?          @db.Text            // Surat Tugas / Proposal / KTP Upload
+  paymentProofUrl  String?          @db.Text            // Struk / Bukti Transfer Pembayaran Upload
+  overtimeHours Float               @default(0)         // Keterlambatan Check-Out (Jam)
+  overtimeFee   Float               @default(0)         // Biaya Overtime (Rp)
+  paidAmount    Float               @default(0)         // Nominal yang sudah dibayar (Rp)
+  notes         String?             @db.Text
+  activityType  String              @default("PERSONAL") // INSTITUTION, ORGANIZATION, PERSONAL
+  consentLogs   ConsentLog[]
+  checkInTime   DateTime?
+  checkOutTime  DateTime?
+  voucherPdfUrl String?
+  bastPdfUrl    String?
+  receiptPdfUrl String?
+  claimPdfUrl   String?
+  addonAssets   BookingAddonAsset[]
+  inspections   BookingInspection[]
+  assetClaim    AssetClaim?
+  handoverLog   HandoverLog?
+  rating        AssetRating?
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @default(now()) @updatedAt
+  masterInvoiceId String?
+  masterInvoice   MasterInvoice? @relation(fields: [masterInvoiceId], references: [id])
+}
+
+model BookingAddonAsset {
+  id             String      @id @default(cuid())
+  bookingId      String
+  booking        RoomBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  assetId        String
+  asset          Asset       @relation(fields: [assetId], references: [id])
+  assetName      String                              // Snapshot nama aset
+  quantity       Int         @default(1)
+  ratePerSession Float                               // Harga add-on per sesi
+  subtotal       Float                               // quantity × ratePerSession
+}
+
+model BookingInspection {
+  id              String      @id @default(cuid())
+  bookingId       String
+  booking         RoomBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  type            String                              // CHECK_IN, CHECK_OUT
+  assetId         String
+  asset           Asset       @relation(fields: [assetId], references: [id])
+  assetName       String                              // Snapshot nama aset
+  conditionBefore String?                             // Kondisi saat check-in
+  conditionAfter  String?                             // Kondisi saat check-out
+  isMissing       Boolean     @default(false)
+  isDamaged       Boolean     @default(false)
+  photoUrls       String      @db.Text    // JSON array URL foto bukti
+  claimAmount     Float?                                 // Estimasi biaya ganti rugi
+  notes           String?     @db.Text
+  inspectedBy     String                              // Nama petugas
+  timestamp       DateTime    @default(now())
+}
+
+model RoomAvailabilityBlock {
+  id         String   @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id])
+  startTime  DateTime
+  endTime    DateTime
+  reason     String      @db.Text              // Kegiatan Internal, Maintenance, dll.
+  createdBy  String
+  createdAt  DateTime @default(now())
+}
+
+model Maintenance {
+  id            String      @id @default(cuid())
+  assetId       String?
+  asset         Asset?      @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  locationId    String?
+  location      Location?   @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  type          String      // PREVENTIVE, CORRECTIVE
+  description   String      @db.Text
+  cost          Float?      @default(0)
+  startDate     DateTime    @default(now())
+  endDate       DateTime?   // Tanggal aktual selesai
+  status        String      @default("ONGOING") // SCHEDULED, ONGOING, COMPLETED, FAILED
+  vendor        String?
+  claimId       String?     @unique
+  claim         AssetClaim? @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  notes         String?     @db.Text
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @default(now()) @updatedAt
+}
+
+model MaintenanceSchedule {
+  id              String             @id @default(cuid())
+  assetId         String?
+  asset           Asset?             @relation("AssetMaintenanceSchedules", fields: [assetId], references: [id], onDelete: Cascade)
+  locationId      String?
+  location        Location?          @relation("LocationMaintenanceSchedules", fields: [locationId], references: [id], onDelete: Cascade)
+  categoryId      String?
+  category        Category?          @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  intervalDays    Int
+  lastMaintenance DateTime?
+  nextDueDate     DateTime
+  isActive        Boolean            @default(true)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @default(now()) @updatedAt
+}
+
+model TransferLog {
+  id            String   @id @default(cuid())
+  assetId       String
+  asset         Asset    @relation(fields: [assetId], references: [id])
+  fromLocation  String?
+  toLocation    String
+  transferredBy String
+  reason        String?  @db.Text
+  transferredAt DateTime @default(now())
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  action    String
+  details   String?  @db.Text
+  ipAddress String?
+  createdAt DateTime @default(now())
+}
+
+model PaymentSetting {
+  id              String   @id @default("default")
+  qrisCode        String   @default("SPASI-INSTANSI-QRIS")
+  qrisImageUrl    String?  @db.Text
+  updatedAt       DateTime @default(now()) @updatedAt
+}
+
+model BankAccount {
+  id          String   @id @default(cuid())
+  bankName    String
+  accountNo   String
+  accountName String
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+}
+
+model MasterInvoice {
+  id              String   @id @default(cuid())
+  invoiceNumber   String   @unique // INV-YYYYMMDD-XXXX
+  renterId        String
+  renter          Renter   @relation(fields: [renterId], references: [id])
+  totalAmount     Float
+  depositAmount   Float
+  payStatus       String   @default("UNPAID") // UNPAID, DOWN_PAYMENT, PAID, REFUNDED
+  payMethod       String?
+  paymentProofUrl String?  @db.Text
+  supportingDocUrl String? @db.Text
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now())
+
+  rentals         Rental[]
+  roomBookings    RoomBooking[]
+}
+
+model SystemSetting {
+  id              String   @id @default("default")
+  autoCancelHours Int      @default(24)
+  dailyPenaltyRate Float   @default(50000)
+  updatedAt       DateTime @default(now()) @updatedAt
+}
+
+model StorageSetting {
+  id              String   @id @default("default")
+  // S3 / MinIO Connection
+  endpoint        String   @default("")        // https://s3.your-domain.com
+  baseUrl         String   @default("")        // Public base URL for serving files
+  bucket          String   @default("spasi")   // Bucket name
+  accessKeyId     String   @default("")        // Access Key ID
+  secretAccessKey String   @default("")        // Secret Access Key (stored encrypted)
+  region          String   @default("us-east-1")
+  forcePathStyle  Boolean  @default(true)      // Required for MinIO
+  isActive        Boolean  @default(false)     // If false, use local storage
+  updatedAt       DateTime @default(now()) @updatedAt
+}
+
+model DocumentTemplate {
+  id                  String   @id @default("default")
+  // Kop Surat / Identitas Instansi
+  institutionName     String   @default("SPASI — Sistem Pencatatan Aset & Sewa Instansi")
+  institutionSubtitle String?  @db.Text  // Alamat / unit kerja instansi
+  institutionLogoUrl  String?  @db.Text  // URL logo instansi
+  // Penandatangan Dokumen
+  signerName          String   @default("Petugas Pengelola Aset")
+  signerTitle         String   @default("Petugas SPASI")
+  signerNip           String?  // NIP / Nomor Induk Pegawai
+  // Catatan & Footer
+  receiptFooterNote   String?  @db.Text  // Catatan kaki kuitansi / disclaimer
+  emailSignature      String?  @db.Text  // Teks tanda tangan/footer email
+  updatedAt           DateTime @default(now()) @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────
+// MODEL BARU: Template Checklist Dinamis & Inspeksi Pengembalian
+// ─────────────────────────────────────────────────────────────
+
+model ChecklistTemplate {
+  id          String                  @id @default(cuid())
+  title       String                  // e.g. Checklist Laptop, Checklist Kamera, Checklist Ruangan
+  description String?                 @db.Text
+  categoryId  String?
+  category    Category?               @relation(fields: [categoryId], references: [id])
+  isDefault   Boolean                 @default(false)
+  items       ChecklistTemplateItem[]
+  createdAt   DateTime                @default(now())
+  updatedAt   DateTime                @default(now()) @updatedAt
+}
+
+model ChecklistTemplateItem {
+  id          String            @id @default(cuid())
+  templateId  String
+  template    ChecklistTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  name        String            // e.g. "Kondisi Body", "Layar", "AC", "Kebersihan"
+  description String?           @db.Text
+  isRequired  Boolean           @default(true)
+  sortOrder   Int               @default(0)
+  createdAt   DateTime          @default(now())
+}
+
+model ReturnInspection {
+  id                   String                       @id @default(cuid())
+  loanId               String                       @unique
+  loan                 Loan                         @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  inspectorId          String
+  inspector            User                         @relation(fields: [inspectorId], references: [id])
+  status               String                       @default("UNDER_INSPECTION") // UNDER_INSPECTION, COMPLETED, NEEDS_REPAIR, LOST_REPORTED
+  totalBaik            Int                          @default(0)
+  totalRusakRingan     Int                          @default(0)
+  totalRusakBerat      Int                          @default(0)
+  totalHilang          Int                          @default(0)
+  totalTidakDiperiksa  Int                          @default(0)
+  resultingAssetStatus String                       @default("AVAILABLE") // AVAILABLE, MAINTENANCE, DAMAGED, DISPOSED
+  overallNotes         String?                      @db.Text
+  generalPhotoUrls     String?                      @db.Text // JSON array URL foto umum
+  itemResults          ReturnInspectionItemResult[]
+  inspectedAt          DateTime                     @default(now())
+  updatedAt            DateTime                     @default(now()) @updatedAt
+}
+
+model ReturnInspectionItemResult {
+  id                 String           @id @default(cuid())
+  inspectionId       String
+  inspection         ReturnInspection @relation(fields: [inspectionId], references: [id], onDelete: Cascade)
+  itemName           String
+  condition          String           // BAIK, RUSAK_RINGAN, RUSAK_BERAT, HILANG, TIDAK_DIPERIKSA
+  problemDescription String?          @db.Text
+  severityLevel      String?          // Ringan, Sedang, Parah
+  actionRequired     String?          // Perbaikan, Pembersihan, Ganti Unit, Laporan Kehilangan
+  photoUrls          String?          @db.Text // JSON array URL foto bukti kerusakan/kehilangan
+  notes              String?          @db.Text
+}
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  user       User?    @relation(fields: [userId], references: [id])
+  action     String   // e.g. CREATE_TEMPLATE, REQUEST_RETURN, PROCESS_INSPECTION, CONFIRM_RETURN
+  entity     String   // e.g. Loan, Asset, ChecklistTemplate, ReturnInspection
+  entityId   String
+  details    String?  @db.Text
+  oldData    String?  @db.Text // JSON string
+  newData    String?  @db.Text // JSON string
+  ipAddress  String?
+  timestamp  DateTime @default(now())
+}
+
+model InAppNotification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String   @db.Text
+  type      String   // INFO, WARNING, SUCCESS, DANGER
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+}
+
+model Violation {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loanId      String?
+  rentalId    String?
+  type        String   // LATE_RETURN, DAMAGED_ASSET, LOST_ASSET
+  description String   @db.Text
+  createdAt   DateTime @default(now())
+}
+
+model AssetClaim {
+  id                 String       @id @default(cuid())
+  claimNumber        String       @unique              // Format: CL-YYYY-0001
+  loanId             String?      @unique
+  loan               Loan?        @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  bookingId          String?      @unique
+  booking            RoomBooking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type               String       // LOST, DAMAGED
+  amount             Float        @default(0)
+  status             String       @default("NEW")      // NEW, INVESTIGATING, AWAITING_PAYMENT, RESOLVED, REJECTED
+  sourceFunding      String       @default("NEW_BILL") // DEDUCT_DEPOSIT, NEW_BILL
+  compensationMethod String?      // CASH_TRANSFER, REPLACEMENT_UNIT
+  proofUrl           String?      @db.Text
+  adminNotes         String?      @db.Text
+  diajukanAsuransi   Boolean      @default(false)
+  statusAsuransi     String?
+  resolvedAt         DateTime?
+  maintenance        Maintenance?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @default(now()) @updatedAt
+}
+
+model HandoverLog {
+  id            String       @id @default(cuid())
+  loanId        String?      @unique
+  loan          Loan?        @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  bookingId     String?      @unique
+  booking       RoomBooking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  type          String       // CHECK_IN, CHECK_OUT
+  inspectorName String
+  status        String       @default("DRAFT") // DRAFT, SUBMITTED
+  components    String       @db.Text          // JSON Array [{ name, condition, isMissing, isDamaged, notes }]
+  photoUrls     String       @db.Text          // JSON Array foto
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @default(now()) @updatedAt
+}
+
+model VerificationRequest {
+  id                String   @id @default(cuid())
+  userId            String
+  user              User     @relation("userRequests", fields: [userId], references: [id], onDelete: Cascade)
+  requestedCategory String   // MAHASISWA, INTERNAL_KAMPUS
+  identityNo        String   // NIM/NIP
+  fullName          String   // Nama lengkap sesuai KTM/KTP
+  departmentName    String?  // Program Studi / Departemen
+  ktmUrl            String   @db.Text // URL foto KTM / Kartu Identitas
+  status            String   @default("PENDING") // PENDING, APPROVED, REJECTED
+  adminNotes        String?  @db.Text // Catatan penolakan admin
+  decidedById       String?
+  decidedBy         User?    @relation("decidedRequests", fields: [decidedById], references: [id])
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model QuotaRule {
+  id                    String   @id @default(cuid())
+  targetType            String   // ROLE, DEPARTMENT, USER
+  targetId              String   // ID target sesuai tipe
+  maxActiveBookings     Int      @default(3)
+  maxDurationDays       Int      @default(3)
+  applicableCategory    String?  // Kategori alat tertentu (opsional)
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @default(now()) @updatedAt
+}
+
+model BlockedPeriod {
+  id          String   @id @default(cuid())
+  startDate   DateTime
+  endDate     DateTime
+  reason      String   @db.Text
+  scope       String   // GLOBAL, CATEGORY, ITEM
+  scopeTarget String?  // ID kategori atau ID item target (nullable)
+  createdBy   String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now()) @updatedAt
+}
+
+model ConsentLog {
+  id                 String       @id @default(cuid())
+  bookingId          String?
+  booking            RoomBooking? @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  loanId             String?
+  loan               Loan?        @relation(fields: [loanId], references: [id], onDelete: Cascade)
+  userId             String
+  user               User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  consentType        String       // GENERAL, RENTAL
+  consentTextVersion String       @db.Text // Teks pernyataan versi lengkap
+  ipAddress          String
+  timestamp          DateTime     @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────
+// MODEL BARU: ERP Mini (Master Operator, Keuangan, Komisi Partner)
+// ─────────────────────────────────────────────────────────────
+
+model Operator {
+  id              String   @id @default(cuid())
+  name            String
+  licenseNo       String?
+  skills          String?  // Keahlian (misal: Sopir, Teknisi Jaringan)
+  status          String   @default("AVAILABLE") // AVAILABLE, ON_DUTY, INACTIVE
+  validUntil      DateTime?
+  rentals         Rental[]
+  loans           Loan[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+}
+
+model Partner {
+  id              String   @id @default(cuid())
+  name            String
+  company         String?
+  phone           String?
+  email           String?
+  commissions     Commission[]
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+}
+
+model Commission {
+  id              String   @id @default(cuid())
+  partnerId       String
+  partner         Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  rentalId        String?
+  amount          Float
+  status          String   @default("UNPAID") // UNPAID, PAID
+  paidAt          DateTime?
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @default(now()) @updatedAt
+}
+
+model CashTransaction {
+  id              String   @id @default(cuid())
+  type            String   // IN (Masuk), OUT (Keluar)
+  category        String   // RENTAL, PENALTY, MAINTENANCE, COMMISSION, DEPOSIT
+  amount          Float
+  referenceId     String?  // ID dari transaksi yang relevan
+  description     String?  @db.Text
+  transactionDate DateTime @default(now())
+  createdAt       DateTime @default(now())
+}
+
+// Rating & Feedback pasca-pemakaian (FR-26)
+model AssetRating {
+  id          String   @id @default(cuid())
+  // Satu dari dua wajib diisi
+  loanId      String?  @unique
+  bookingId   String?  @unique
+  loan        Loan?    @relation(fields: [loanId], references: [id])
+  booking     RoomBooking? @relation(fields: [bookingId], references: [id])
+  // Pemberi rating adalah user yang login
+  userId      String
+  user        User     @relation(fields: [userId], references: [id])
+  // Konten rating
+  score       Int      // 1-5 bintang
+  condition   String?  // BAIK | PERLU_PERBAIKAN | RUSAK
+  comment     String?  @db.Text
+  createdAt   DateTime @default(now())
+}
+
+// ─────────────────────────────────────────────────────────────
+// MODUL CRM: Manajemen Peminjam & Relasi
+// ─────────────────────────────────────────────────────────────
+
+// Kartu keanggotaan digital — QR verifikasi cepat saat serah terima (opsional)
+model MemberCard {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cardNumber  String   @unique    // KAR-YYYY-XXXX
+  qrToken     String   @unique @default(cuid())
+  isActive    Boolean  @default(true)
+  issuedAt    DateTime @default(now())
+  expiredAt   DateTime?
+  notes       String?  @db.Text
+}
+
+// Log komunikasi / notifikasi yang terkirim ke peminjam (audit trail notifikasi)
+model CommunicationLog {
+  id          String   @id @default(cuid())
+  userId      String?  // User internal
+  renterId    String?  // Renter eksternal (disimpan sebagai ID string saja, no FK constraint)
+  channel     String   // WHATSAPP, EMAIL, IN_APP, MANUAL_CALL, MANUAL_NOTE
+  type        String   // BOOKING_CONFIRM, PENALTY_REMINDER, RETURN_REMINDER, APPROVAL_RESULT, BLACKLIST_NOTICE, OTHER
+  subject     String
+  body        String   @db.Text
+  status      String   @default("SENT") // SENT, FAILED, PENDING
+  relatedId   String?  // ID transaksi terkait (opsional)
+  relatedType String?  // LOAN, RENTAL, ROOM_BOOKING (opsional)
+  createdBy   String?  // ID User admin (null = sistem otomatis)
+  sentAt      DateTime @default(now())
+}
+
+// Riwayat penangguhan/blacklist peminjam — menggantikan boolean isSuspended yg tidak punya history
+model BlacklistRecord {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  reason       String   @db.Text
+  type         String   @default("SUSPENSION") // SUSPENSION, WARNING, PERMANENT
+  startDate    DateTime @default(now())
+  endDate      DateTime?  // null = permanen sampai override manual admin
+  liftedAt     DateTime?
+  liftedBy     String?    // ID User admin yang mencabut penangguhan
+  liftReason   String?  @db.Text
+  violationRef String?  // ID Violation terkait (opsional)
+  createdBy    String   // ID User admin yang menerapkan
+  createdAt    DateTime @default(now())
+}
+
+// Grup / organisasi peminjam (UKM, BEM, Kepanitiaan, unit kerja, dll.)
+model BorrowerGroup {
+  id          String              @id @default(cuid())
+  name        String
+  code        String?             @unique
+  type        String              @default("ORGANIZATION") // ORGANIZATION, COMMITTEE, UNIT, EXTERNAL_ORG
+  description String?             @db.Text
+  leaderId    String?             // User ID ketua/penanggung jawab
+  isActive    Boolean             @default(true)
+  members     BorrowerGroupMember[]
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @default(now()) @updatedAt
+}
+
+model BorrowerGroupMember {
+  id        String        @id @default(cuid())
+  groupId   String
+  group     BorrowerGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      String        @default("MEMBER") // LEADER, PIC, MEMBER
+  joinedAt  DateTime      @default(now())
+
+  @@unique([groupId, userId])
+}
+
+// ─────────────────────────────────────────────────────────────
+// MODUL USER MANAGEMENT: RBAC Fleksibel & Konfigurasi Approval
+// ─────────────────────────────────────────────────────────────
+
+// Definisi permission atomik per aksi per modul
+model Permission {
+  id              String           @id @default(cuid())
+  module          String           // ASSETS, LOANS, RENTALS, BOOKINGS, FINANCE, CRM, SETTINGS, REPORTS, MAINTENANCE
+  action          String           // CREATE, READ, UPDATE, DELETE, APPROVE, EXPORT
+  description     String?
+  rolePermissions RolePermission[]
+
+  @@unique([module, action])
+}
+
+// Mapping role → permission (many-to-many)
+model RolePermission {
+  id           String     @id @default(cuid())
+  roleName     String     // Nama role: ADMIN, APPROVER, STAFF, KEUANGAN, PETUGAS_SERAH_TERIMA, dsb.
+  permissionId String
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleName, permissionId])
+}
+
+// Konfigurasi approval berjenjang per kombinasi: Departemen + Kategori Aset + Level
+// Satu orang bisa jadi approver level 1 di Dept A, bukan approver di Dept B
+model ApprovalConfig {
+  id           String    @id @default(cuid())
+  departmentId String?   // null = berlaku global untuk semua unit
+  categoryId   String?   // null = berlaku untuk semua kategori di unit ini
+  transactionType String @default("LOAN") // LOAN, RENTAL, ROOM_BOOKING
+  level        Int       // 1, 2, 3 (urutan approval berjenjang)
+  approverId   String    // User ID approver untuk konfigurasi ini
+  isActive     Boolean   @default(true)
+  notes        String?   @db.Text
+  createdBy    String    // ID User admin pembuat konfigurasi
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @default(now()) @updatedAt
+
+  @@unique([departmentId, categoryId, transactionType, level])
+}
+
+// Template pesan notifikasi per event — admin bisa ubah teks tanpa ubah kode
+model NotificationTemplate {
+  id            String   @id @default(cuid())
+  eventType     String   @unique // BOOKING_CONFIRM, PENALTY_NOTICE, APPROVAL_RESULT, RETURN_REMINDER, BLACKLIST_NOTICE, dll.
+  label         String           // Label tampil di UI: "Konfirmasi Booking", dll.
+  channelWa     Boolean  @default(true)
+  channelEmail  Boolean  @default(false)
+  channelInApp  Boolean  @default(true)
+  templateWa    String?  @db.Text  // Teks WA dengan variabel {{name}}, {{date}}, {{item}}, dll.
+  templateEmail String?  @db.Text  // Template HTML email
+  isActive      Boolean  @default(true)
+  updatedAt     DateTime @default(now()) @updatedAt
+}
+
+// Kebijakan keamanan akun — password policy, session timeout, 2FA
+model SecurityPolicy {
+  id                  String   @id @default("default")
+  minPasswordLength   Int      @default(8)
+  requireUppercase    Boolean  @default(false)
+  requireNumber       Boolean  @default(true)
+  requireSpecialChar  Boolean  @default(false)
+  sessionTimeoutMins  Int      @default(480) // 8 jam default
+  maxLoginAttempts    Int      @default(5)
+  lockoutDurationMins Int      @default(30)
+  enable2FA           Boolean  @default(false)
+  updatedAt           DateTime @default(now()) @updatedAt
+}
+
+model WhatsAppSetting {
+  id              String   @id @default("default")
+  provider        String   @default("EVOLUTION") // EVOLUTION, FONNTE, GENERIC
+  apiUrl          String?  @db.Text
+  apiKey          String?  @db.Text
+  instanceName    String?  @db.Text
+  payloadTemplate String?  @db.Text
+  headers         String?  @db.Text
+  updatedAt       DateTime @default(now()) @updatedAt
+}
+
+

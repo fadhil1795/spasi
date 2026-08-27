@@ -1,0 +1,24 @@
+{
+  "name": "SPASI — Sistem Pencatatan Aset, Sewa & Pinjam Instansi",
+  "short_name": "SPASI",
+  "description": "Sistem Informasi Manajemen Aset, Peminjaman Internal, dan Penyewaan Eksternal Berbasis Web PWA",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0F0F1A",
+  "theme_color": "#4F46E5",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icons/spasi-logo.jpg",
+      "sizes": "192x192 512x512",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/spasi-logo.jpg",
+      "sizes": "192x192 512x512",
+      "type": "image/jpeg",
+      "purpose": "maskable"
+    }
+  ]
+}

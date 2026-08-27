@@ -1,0 +1,12 @@
+node_modules
+.vercel
+.env
+.next
+.vercel
+.kiro
+.env.production
+.env.local
+README.md
+rencana.md
+spesifikasi.md
+
