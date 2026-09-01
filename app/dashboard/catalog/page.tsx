@@ -153,9 +153,11 @@ export default function DashboardCatalogPage() {
           <Link href="/dashboard/cart" className="btn" style={{ background: 'rgba(255,255,255,0.2)', color: '#FFFFFF', fontWeight: 600 }}>
             <ShoppingBag size={18} /> Keranjang Saya
           </Link>
-          <Link href="/dashboard/room-bookings/new" className="btn" style={{ background: '#FFFFFF', color: 'var(--color-primary)', fontWeight: 700 }}>
-            <Sparkles size={18} /> Booking Langsung via Wizard
-          </Link>
+          {!(session?.user && (session.user as any).role === 'BORROWER' && ((session.user as any).renterCategory || 'EXTERNAL') === 'EXTERNAL') && (
+            <Link href="/dashboard/room-bookings/new" className="btn" style={{ background: '#FFFFFF', color: 'var(--color-primary)', fontWeight: 700 }}>
+              <Sparkles size={18} /> Booking Langsung via Wizard
+            </Link>
+          )}
         </div>
       </div>
 
@@ -301,44 +303,129 @@ export default function DashboardCatalogPage() {
                     </div>
 
                     <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '1rem' }}>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginBottom: '0.2rem' }}>Tarif Sewa</div>
-                      <div style={{ fontSize: '1.15rem', fontWeight: 900, color: 'var(--color-success)', marginBottom: '0.85rem' }}>
-                        {formatCurrency(room.pricePerHour || 0)}<span style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--color-muted)' }}>/jam</span>
-                      </div>
+                      {(() => {
+                        const isBorrower = session?.user && (session.user as any).role === 'BORROWER';
+                        const renterCategory = isBorrower ? ((session.user as any).renterCategory || 'EXTERNAL') : 'EXTERNAL';
+                        
+                        if (isBorrower && renterCategory !== 'EXTERNAL') {
+                          // Internal user
+                          if (room.isLoanable) {
+                            return (
+                              <>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginBottom: '0.2rem' }}>Tarif Sewa</div>
+                                <div style={{ fontSize: '1.15rem', fontWeight: 900, color: 'var(--color-success)', marginBottom: '0.85rem' }}>
+                                  Gratis <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--color-warning)' }}>
+                                    {room.requiresDepositForInternal && (room.depositAmount || room.price) ? `(Wajib Deposit: ${formatCurrency(room.depositAmount || room.price)})` : '(Pinjam)'}
+                                  </span>
+                                </div>
+                              </>
+                            );
+                          } else {
+                            // Paid room for internal
+                            return (
+                              <>
+                                <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginBottom: '0.2rem' }}>Tarif Sewa (Internal Berbayar)</div>
+                                <div style={{ fontSize: '1.15rem', fontWeight: 900, color: 'var(--color-success)', marginBottom: '0.85rem' }}>
+                                  {formatCurrency(room.pricePerHour || 0)}<span style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--color-muted)' }}>/jam</span>
+                                </div>
+                              </>
+                            );
+                          }
+                        }
 
-                      {session?.user && (session.user as any).role === 'BORROWER' && ((session.user as any).renterCategory || 'EXTERNAL') === 'EXTERNAL' ? (
-                        <div style={{
-                          background: 'rgba(239,68,68,0.04)',
-                          border: '1px dashed rgba(239,68,68,0.2)',
-                          padding: '0.65rem 0.85rem',
-                          borderRadius: 'var(--radius-md)',
-                          textAlign: 'center',
-                          fontSize: '0.73rem',
-                          color: 'var(--color-muted)',
-                          lineHeight: 1.4,
-                        }}>
-                          🔒 Akses terbatas bagi Eksternal. Silakan ajukan verifikasi.
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleAddRoomToCart(room)}
-                            style={{ flex: 1, padding: '0.5rem' }}
-                          >
-                            <ShoppingBag size={14} /> + Keranjang
-                          </Button>
+                        // External / Admin
+                        return (
+                          <>
+                            <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginBottom: '0.2rem' }}>Tarif Sewa</div>
+                            <div style={{ fontSize: '1.15rem', fontWeight: 900, color: 'var(--color-success)', marginBottom: '0.85rem' }}>
+                              {formatCurrency(room.pricePerHour || 0)}<span style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--color-muted)' }}>/jam</span>
+                            </div>
+                          </>
+                        );
+                      })()}
 
-                          <Link
-                            href={`/dashboard/room-bookings/new?roomId=${room.id}`}
-                            className="btn btn-primary btn-sm"
-                            style={{ flex: 1, padding: '0.5rem' }}
-                          >
-                            Pesan Sekarang <ArrowRight size={14} />
-                          </Link>
-                        </div>
-                      )}
+                      {(() => {
+                        const isBorrower = session?.user && (session.user as any).role === 'BORROWER';
+                        const renterCategory = isBorrower ? ((session.user as any).renterCategory || 'EXTERNAL') : 'EXTERNAL';
+                        
+                        if (isBorrower) {
+                          if (renterCategory === 'EXTERNAL') {
+                            if (!room.isRentable) {
+                              return (
+                                <div style={{
+                                  background: 'rgba(239,68,68,0.04)',
+                                  border: '1px dashed rgba(239,68,68,0.2)',
+                                  padding: '0.65rem 0.85rem',
+                                  borderRadius: 'var(--radius-md)',
+                                  textAlign: 'center',
+                                  fontSize: '0.73rem',
+                                  color: 'var(--color-danger)',
+                                  lineHeight: 1.4,
+                                  fontWeight: 600,
+                                }}>
+                                  🔒 Tidak disewakan untuk Eksternal.
+                                </div>
+                              );
+                            }
+                            // Rentable, but user is external (unverified)
+                            return (
+                              <div style={{
+                                background: 'rgba(239,68,68,0.04)',
+                                  border: '1px dashed rgba(239,68,68,0.2)',
+                                padding: '0.65rem 0.85rem',
+                                borderRadius: 'var(--radius-md)',
+                                textAlign: 'center',
+                                fontSize: '0.73rem',
+                                color: 'var(--color-muted)',
+                                lineHeight: 1.4,
+                              }}>
+                                🔒 Akses terbatas bagi Eksternal. Silakan ajukan verifikasi.
+                              </div>
+                            );
+                          } else {
+                            // Internal
+                            if (!room.isLoanable && !room.isRentable) {
+                              return (
+                                <div style={{
+                                  background: 'rgba(239,68,68,0.04)',
+                                  border: '1px dashed rgba(239,68,68,0.2)',
+                                  padding: '0.65rem 0.85rem',
+                                  borderRadius: 'var(--radius-md)',
+                                  textAlign: 'center',
+                                  fontSize: '0.73rem',
+                                  color: 'var(--color-danger)',
+                                  lineHeight: 1.4,
+                                  fontWeight: 600,
+                                }}>
+                                  🔒 Ruangan sedang dinonaktifkan/tutup.
+                                </div>
+                              );
+                            }
+                          }
+                        }
+
+                        // Rentable/Loanable or not borrower (Staff/Admin)
+                        return (
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => handleAddRoomToCart(room)}
+                              style={{ flex: 1, padding: '0.5rem' }}
+                            >
+                              <ShoppingBag size={14} /> + Keranjang
+                            </Button>
+
+                            <Link
+                              href={`/dashboard/room-bookings/new?roomId=${room.id}`}
+                              className="btn btn-primary btn-sm"
+                              style={{ flex: 1, padding: '0.5rem' }}
+                            >
+                              Pesan Sekarang <ArrowRight size={14} />
+                            </Link>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </Card>

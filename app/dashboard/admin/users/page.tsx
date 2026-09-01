@@ -34,6 +34,7 @@ export default function AdminUsersPage() {
   const userRole = (session?.user as any)?.role || '';
   if (userRole && userRole !== 'SUPER_ADMIN') {
     router.push('/dashboard');
+    return null;
   }
 
   const [activeTab, setActiveTab] = useState<Tab>('users');

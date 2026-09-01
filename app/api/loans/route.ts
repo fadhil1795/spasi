@@ -81,6 +81,10 @@ export async function POST(request: Request) {
       where: { id: userId }
     });
 
+    if (user && user.role === 'BORROWER' && user.renterCategory === 'EXTERNAL') {
+      return NextResponse.json({ error: 'Akses terbatas bagi pengguna Eksternal. Silakan ajukan verifikasi akun terlebih dahulu.' }, { status: 403 });
+    }
+
     if (user) {
       let appliedRule = await prisma.quotaRule.findFirst({
         where: { targetType: 'USER', targetId: userId }

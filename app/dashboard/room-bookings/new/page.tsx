@@ -14,7 +14,7 @@ import {
   Building2, Package, User, ClipboardList, Send, CalendarClock, Upload, CheckCircle, AlertCircle
 } from 'lucide-react';
 
-interface Room { id: string; name: string; code: string; building?: string; pricePerHour: number; pricePerDay?: number; capacity: number; depositAmount?: number; }
+interface Room { id: string; name: string; code: string; building?: string; pricePerHour: number; pricePerDay?: number; capacity: number; depositAmount?: number; isRentable?: boolean; isLoanable?: boolean; requiresDepositForInternal?: boolean; }
 interface AddOnAsset { id: string; name: string; code: string; sessionRentRate: number; imageUrl?: string; }
 interface AddOnItem { asset: AddOnAsset; qty: number; }
 
@@ -141,9 +141,19 @@ function RoomBookingWizardContent() {
   const duration = calculateDuration();
   const roomRate = selectedRoom ? (rentalType === 'HOURLY' ? selectedRoom.pricePerHour : (selectedRoom.pricePerDay || selectedRoom.pricePerHour * 8)) : 0;
   
-  const roomSubtotal = renterCategory === 'MAHASISWA' || renterCategory === 'EXTERNAL_PINJAM' ? 0 : roomRate * duration;
-  const addOnSubtotal = renterCategory === 'MAHASISWA' || renterCategory === 'EXTERNAL_PINJAM' ? 0 : addOns.reduce((acc, a) => acc + a.asset.sessionRentRate * a.qty, 0);
-  const roomDeposit = renterCategory === 'MAHASISWA' || renterCategory === 'EXTERNAL_SEWA' ? 0 : (selectedRoom?.depositAmount || 0);
+  const isFreeForInternal = selectedRoom ? selectedRoom.isLoanable !== false : true;
+
+  const roomSubtotal = renterCategory === 'MAHASISWA'
+    ? (isFreeForInternal ? 0 : roomRate * duration)
+    : (renterCategory === 'EXTERNAL_PINJAM' ? 0 : roomRate * duration);
+
+  const addOnSubtotal = renterCategory === 'MAHASISWA'
+    ? (isFreeForInternal ? 0 : addOns.reduce((acc, a) => acc + a.asset.sessionRentRate * a.qty, 0))
+    : (renterCategory === 'EXTERNAL_PINJAM' ? 0 : addOns.reduce((acc, a) => acc + a.asset.sessionRentRate * a.qty, 0));
+
+  const roomDeposit = renterCategory === 'MAHASISWA'
+    ? (selectedRoom?.requiresDepositForInternal ? (selectedRoom?.depositAmount || 0) : 0)
+    : (renterCategory === 'EXTERNAL_SEWA' ? 0 : (selectedRoom?.depositAmount || 0));
   
   const grandTotal = roomSubtotal + addOnSubtotal + roomDeposit;
   const depositToPay = renterCategory === 'EXTERNAL_SEWA' && paymentType === 'DP'
@@ -180,9 +190,23 @@ function RoomBookingWizardContent() {
         ]);
         if (resRooms.ok) {
           const list = await resRooms.json();
-          setRooms(list);
+          
+          // Filter rooms based on the active user role and category
+          const userRole = session?.user && (session.user as any).role || 'BORROWER';
+          const userCategory = session?.user && (session.user as any).renterCategory || 'EXTERNAL';
+
+          let filteredList = list;
+          if (userRole === 'BORROWER') {
+            if (userCategory === 'EXTERNAL') {
+              filteredList = list.filter((r: any) => r.isRentable);
+            } else {
+              filteredList = list.filter((r: any) => r.isLoanable || r.isRentable);
+            }
+          }
+          
+          setRooms(filteredList);
           if (roomIdParam) {
-            const matched = list.find((r: Room) => r.id === roomIdParam);
+            const matched = filteredList.find((r: Room) => r.id === roomIdParam);
             if (matched) {
               setSelectedRoom(matched);
               setAvailabilityChecked(true);
@@ -194,7 +218,7 @@ function RoomBookingWizardContent() {
       } catch (e) { console.error(e); }
       finally { setLoadingRooms(false); }
     })();
-  }, [roomIdParam]);
+  }, [roomIdParam, session]);
 
   useEffect(() => {
     if (step !== 2) return;

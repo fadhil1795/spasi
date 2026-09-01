@@ -2,11 +2,11 @@ node_modules
 .vercel
 .env
 .next
-.vercel
 .kiro
 .env.production
 .env.local
+*.tsbuildinfo
+tsconfig.tsbuildinfo
 README.md
 rencana.md
 spesifikasi.md
-

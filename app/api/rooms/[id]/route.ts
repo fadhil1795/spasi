@@ -41,6 +41,7 @@ export async function PUT(request: Request, { params }: { params: { id: string }
       code, name, building, floor, room, area, capacity,
       pricePerHour, pricePerDay, depositAmount, description,
       status, facilities, photos,
+      isRentable, isLoanable, requiresDepositForInternal,
     } = body;
 
     const updated = await prisma.location.update({
@@ -56,6 +57,9 @@ export async function PUT(request: Request, { params }: { params: { id: string }
         pricePerHour: pricePerHour ? parseFloat(pricePerHour) : null,
         pricePerDay: pricePerDay ? parseFloat(pricePerDay) : null,
         depositAmount: depositAmount ? parseFloat(depositAmount) : null,
+        isRentable: isRentable === undefined ? false : Boolean(isRentable),
+        isLoanable: isLoanable === undefined ? true : Boolean(isLoanable),
+        requiresDepositForInternal: requiresDepositForInternal === undefined ? false : Boolean(requiresDepositForInternal),
         description: description || null,
         status: status || 'AVAILABLE',
         facilities: JSON.stringify(Array.isArray(facilities) ? facilities : []),

@@ -157,9 +157,20 @@ function LoginForm() {
                 fontSize: '0.88rem',
                 marginBottom: '1.5rem',
                 animation: 'fadeInUp 0.3s ease',
+                lineHeight: 1.5,
               }}
             >
-              {errorMsg}
+              {errorMsg === 'User tidak ditemukan' || errorMsg.includes('tidak ditemukan') ? (
+                <span>
+                  Email Anda belum terdaftar di database SPASI. Silakan{' '}
+                  <Link href="/register" style={{ fontWeight: 700, textDecoration: 'underline', color: 'var(--color-danger)' }}>
+                    daftar (sign up) di sini
+                  </Link>{' '}
+                  terlebih dahulu untuk membuat akun.
+                </span>
+              ) : (
+                errorMsg
+              )}
             </div>
           )}
 

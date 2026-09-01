@@ -42,6 +42,10 @@ interface RoomDetail {
   pricePerHour: number | null;
   pricePerDay: number | null;
   deposit: number | null;
+  depositAmount?: number | null;
+  isRentable?: boolean;
+  isLoanable?: boolean;
+  requiresDepositForInternal?: boolean;
   facilities: string[];
   photos: string[];
   status: string;
@@ -517,11 +521,32 @@ function TabInfo({
                 </span>
               </InfoRow>
             )}
-            {room.deposit != null && (
+            {(room.depositAmount != null || room.deposit != null) && (
               <InfoRow icon={<DollarSign size={15} />} label="Deposit Jaminan">
-                {formatCurrency(room.deposit)}
+                {formatCurrency(room.depositAmount ?? room.deposit)}
               </InfoRow>
             )}
+            <div style={{ borderTop: '1px solid var(--color-border)', margin: '0.5rem 0', paddingTop: '0.5rem' }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
+                <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: room.isLoanable ? 'var(--color-success)' : 'var(--color-muted)' }} />
+                <span style={{ color: room.isLoanable ? 'var(--color-text)' : 'var(--color-muted)' }}>
+                  Bisa Dipinjam Gratis (Internal): <strong>{room.isLoanable ? 'Ya' : 'Tidak'}</strong>
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
+                <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: room.isRentable ? 'var(--color-success)' : 'var(--color-muted)' }} />
+                <span style={{ color: room.isRentable ? 'var(--color-text)' : 'var(--color-muted)' }}>
+                  Bisa Disewa Berbayar: <strong>{room.isRentable ? 'Ya' : 'Tidak'}</strong>
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}>
+                <span style={{ display: 'inline-block', width: '8px', height: '8px', borderRadius: '50%', backgroundColor: room.requiresDepositForInternal ? 'var(--color-warning)' : 'var(--color-muted)' }} />
+                <span style={{ color: room.requiresDepositForInternal ? 'var(--color-text)' : 'var(--color-muted)' }}>
+                  Wajib Deposit bagi Internal: <strong>{room.requiresDepositForInternal ? 'Ya' : 'Tidak'}</strong>
+                </span>
+              </div>
+            </div>
           </div>
         </Card>
       </div>

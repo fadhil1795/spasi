@@ -1,0 +1,68 @@
+# Walkthrough — Perbaikan Proteksi Rute dan Akses Role (RBAC)
+
+Kami telah melakukan audit dan perbaikan menyeluruh terhadap sistem proteksi rute di dashboard dan menemukan bahwa beberapa halaman administratif dapat diakses secara langsung oleh pengguna dengan role non-admin (`BORROWER`, `STAFF`, atau `APPROVER`) dengan cara mengetikkan URL rute secara manual di browser (karena tidak adanya pemeriksaan tingkat halaman di sisi klien).
+
+Kami telah mengimplementasikan perbaikan sebagai berikut:
+
+## 1. Centralized Route Whitelisting (Default Deny untuk Semua Role)
+Kami menulis ulang logika otorisasi rute sinkron terpusat di dalam file layout dashboard menggunakan pendekatan **default-deny / whitelist** untuk semua role:
+* **File:** [`app/dashboard/layout.tsx`](file:///d:/aplikasi/SPASI/app/dashboard/layout.tsx)
+* **Deskripsi Perubahan:** 
+  * Semua rute yang tidak secara eksplisit terdaftar di dalam whitelist untuk masing-masing role pengguna akan **otomatis ditolak/diblokir**.
+  * **Pencegahan Akses Tab Pengaturan:** Untuk semua role non-admin (`BORROWER`, `STAFF`, `APPROVER`), mereka hanya diizinkan membuka halaman `/dashboard/settings` dengan tab `profile` atau `sanctions`. Sub-rute pengaturan lainnya seperti `/dashboard/settings/checklists` otomatis diblokir sepenuhnya.
+  * **Penyelesaian Error Pre-Rendering SSR (useSearchParams):** Mengganti penggunaan React hook `useSearchParams()` dengan parser parameter manual berbasis objek `window` di sisi klien. Ini menghilangkan `TypeError useContext` yang disebabkan de-optimasi kompilasi statis (pre-rendering) oleh Next.js.
+  * **Mengatasi Balapan Navigasi Klien (Soft-Navigation Race Condition):** Melakukan pengecekan sinkron untuk penolakan rute berbasis path (tidak bergantung pada parameter) guna mencegah flash UI admin, dan melakukan pengecekan reaktif untuk rute berbasis parameter kueri (`tab` dan `mode`) di dalam `useEffect` yang dipicu setiap kali `pathname` atau query string (`window.location.search`) berubah. Hal ini memperbaiki masalah menu personal peminjaman/sewa milik role non-admin yang sebelumnya terblokir karena race condition browser saat navigasi Next.js Link dilakukan.
+  * **Whitelist untuk `BORROWER`:**
+    1. Beranda: `/dashboard`
+    2. Katalog: `/dashboard/catalog/**`
+    3. Keranjang Belanja: `/dashboard/cart/**`
+    4. Tagihan & Denda: `/dashboard/penalties/**`
+    5. Pengajuan Peminjaman Baru & Detail: `/dashboard/loans/new` dan `/dashboard/loans/[id]` (namun memblokir `/dashboard/loans/scan`).
+    6. Riwayat Peminjaman Pribadi: `/dashboard/loans?mode=my`.
+    7. Riwayat Sewa Ruangan Pribadi: `/dashboard/rentals?mode=my` dan `/dashboard/rentals/[id]`.
+    8. Detail Reservasi Ruangan: `/dashboard/room-bookings/[id]` (tetapi memblokir halaman `/checkin`, `/checkout`, dan `/scan`).
+    9. Riwayat Transaksi: `/dashboard/history/**`
+    10. Ganti Rugi & Akses Klaim: `/dashboard/claims/**`
+    11. Verifikasi Akun Pribadi: `/dashboard/verification`.
+    12. Pengaturan Profil: `/dashboard/settings` (hanya tab `profile` atau `sanctions`).
+  * **Whitelist untuk `APPROVER`:**
+    1. Beranda: `/dashboard`
+    2. Katalog & Keranjang: `/dashboard/catalog/**` dan `/dashboard/cart/**`
+    3. Peminjaman & Detail: `/dashboard/loans/**` (memblokir `/dashboard/loans/scan`).
+    4. Sewa Ruangan Pribadi: `/dashboard/rentals?mode=my` dan `/dashboard/rentals/[id]`.
+    5. Riwayat & Laporan: `/dashboard/history/**`, `/dashboard/claims/**`, dan `/dashboard/reports/**`.
+    6. Pengaturan Profil: `/dashboard/settings` (hanya tab `profile` or `sanctions`).
+  * **Whitelist untuk `STAFF`:**
+    1. Mengakses rute katalog, keranjang, peminjaman, penyewaan, handovers, returns, crm, maintenance, aset, dan denda.
+    2. Diblokir dari rute admin tingkat tinggi seperti: `/dashboard/verifications` (daftar verifikasi user), `/dashboard/admin/users` (manajemen user admin), `/dashboard/finance` (keuangan), `/dashboard/admin/partners` (mitra), `/dashboard/categories` (kelola kategori), `/dashboard/tools` (utilitas), dan `/dashboard/reports` (laporan).
+    3. Hanya diperbolehkan mengakses `/dashboard/settings` pada tab `profile` atau `sanctions`.
+
+## 2. Pemblokiran Booking bagi Pengguna Eksternal Belum Terverifikasi
+Kami mengidentifikasi celah di mana pengguna eksternal yang belum terverifikasi (`renterCategory === 'EXTERNAL'`) dapat mem-bypass batasan katalog dengan mengakses langsung halaman wizard booking `/new`. Kami mengatasinya dengan:
+* **Sinkronisasi Data Session ([`lib/auth.ts`](file:///d:/aplikasi/SPASI/lib/auth.ts)):** Menyisipkan data `renterCategory` ke dalam callbacks token JWT dan session NextAuth, sehingga data verifikasi pengguna sinkron secara dinamis di seluruh komponen React.
+* **Layout Guard terintegrasi ([`app/dashboard/layout.tsx`](file:///d:/aplikasi/SPASI/app/dashboard/layout.tsx)):** Jika rute yang dituju adalah pembuatan transaksi baru (`/dashboard/room-bookings/new`, `/dashboard/rentals/new`, atau `/dashboard/loans/new`) dan pengguna terdeteksi berstatus `EXTERNAL`, akses akan langsung diblokir di tingkat tata letak (layout).
+* **Proteksi Sisi Server ([`app/api/room-bookings/route.ts`](file:///d:/aplikasi/SPASI/app/api/room-bookings/route.ts) & [`app/api/loans/route.ts`](file:///d:/aplikasi/SPASI/app/api/loans/route.ts)):** Menambahkan pengecekan status di endpoint POST API. Backend akan menolak request pembuatan booking baru dengan respon `403 Forbidden` jika mendeteksi pemohon berstatus `EXTERNAL`.
+* **Proteksi UI Katalog ([`app/dashboard/catalog/page.tsx`](file:///d:/aplikasi/SPASI/app/dashboard/catalog/page.tsx)):** Menyembunyikan tombol "Booking Langsung via Wizard" untuk pengguna `EXTERNAL` agar konsisten dengan pesan pembatasan akses.
+
+## 3. Peningkatan Pengalaman Alur Login (Graceful Login Flow)
+Menambahkan validasi respons autentikasi jika pengguna belum terdaftar di database:
+* **File:** [`app/login/page.tsx`](file:///d:/aplikasi/SPASI/app/login/page.tsx)
+* **Deskripsi Perubahan:** 
+  * Ketika NextAuth mengembalikan error "User tidak ditemukan" (atau email tidak terdaftar), kotak pesan error di halaman login akan memunculkan rekomendasi mendaftar akun baru secara bersahabat yang dilengkapi dengan tautan aktif ke halaman pendaftaran ([`/register`](file:///d:/aplikasi/SPASI/app/register/page.tsx)).
+
+## 4. Pengamanan Tab Pengaturan (Settings Tabs Security)
+Kami menambahkan batasan `isAdmin` pada tab pengaturan sistem dan template agar tidak dapat diakses secara ilegal oleh pengguna biasa melalui parameter URL:
+* **File:** [`app/dashboard/settings/page.tsx`](file:///d:/aplikasi/SPASI/app/dashboard/settings/page.tsx)
+* **Deskripsi Perubahan:** 
+  * Tab **Sistem & Otomatisasi** (`activeTab === 'system'`) dan **Template Dokumen** (`activeTab === 'template'`) sekarang dilindungi dengan pengecekan `isAdmin` sebelum dirender.
+
+## 5. Early Exit pada Redirect Halaman Admin User
+Kami menyempurnakan local redirect halaman pengelolaan user untuk menghentikan proses rendering halaman administratif sepenuhnya:
+* **File:** [`app/dashboard/admin/users/page.tsx`](file:///d:/aplikasi/SPASI/app/dashboard/admin/users/page.tsx)
+* **Deskripsi Perubahan:** 
+  * Menambahkan `return null;` tepat setelah `router.push('/dashboard')` agar komponen React langsung keluar dan tidak sempat memproses rendering layout tabel user sensitif.
+
+---
+
+### Hasil Audit & Keamanan Backend
+Kami juga telah memverifikasi seluruh file API endpoints di dalam folder `app/api/`. Seluruh REST API Administratif (termasuk CRM, pengaturan sistem, data aset, keuangan, dan whatsapp) **telah dilindungi dengan benar di sisi server** menggunakan helper `getAuthSession()` dan validasi role. Sehingga jika ada penyerang mencoba menembak API secara langsung menggunakan token non-admin, backend akan secara otomatis menolak dengan respon `403 Forbidden`.

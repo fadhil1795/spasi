@@ -89,6 +89,9 @@ export default function NewRoomPage() {
   const [pricePerHour, setPricePerHour] = useState('');
   const [pricePerDay, setPricePerDay] = useState('');
   const [deposit, setDeposit] = useState('');
+  const [isRentable, setIsRentable] = useState(false);
+  const [isLoanable, setIsLoanable] = useState(true);
+  const [requiresDepositForInternal, setRequiresDepositForInternal] = useState(false);
 
   const [facilities, setFacilities] = useState<string[]>([]);
 
@@ -160,7 +163,10 @@ export default function NewRoomPage() {
         description: description.trim() || null,
         pricePerHour: pricePerHour ? parseFloat(pricePerHour) : null,
         pricePerDay: pricePerDay ? parseFloat(pricePerDay) : null,
-        deposit: deposit ? parseFloat(deposit) : null,
+        depositAmount: deposit ? parseFloat(deposit) : null,
+        isRentable,
+        isLoanable,
+        requiresDepositForInternal,
         facilities,
         assetIds,
         photos: photos.filter((p) => p.trim() !== ''),
@@ -340,15 +346,93 @@ export default function NewRoomPage() {
               type="number"
               placeholder="1000000"
               value={deposit}
-              onChange={(e) => setDeposit(e.target.value)}
+              onChange={(e) => {
+                setDeposit(e.target.value);
+                if (!e.target.value) setRequiresDepositForInternal(false);
+              }}
               style={{ marginBottom: 0 }}
             />
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
+            <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.88rem' }}>
+                <input
+                  type="checkbox"
+                  checked={isLoanable}
+                  onChange={(e) => setIsLoanable(e.target.checked)}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <span>Bisa Dipinjam (Gratis untuk Internal)</span>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.88rem' }}>
+                <input
+                  type="checkbox"
+                  checked={isRentable}
+                  onChange={(e) => setIsRentable(e.target.checked)}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <span>Bisa Disewa (Berbayar untuk Eksternal / Internal)</span>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.88rem', opacity: deposit ? 1 : 0.5 }}>
+                <input
+                  type="checkbox"
+                  checked={requiresDepositForInternal}
+                  disabled={!deposit}
+                  onChange={(e) => setRequiresDepositForInternal(e.target.checked)}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <span>Wajib Deposit bagi Internal</span>
+              </label>
+            </div>
+            {!deposit && (
+              <p style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginTop: '-0.5rem' }}>
+                * Jaminan deposit harus diisi untuk mengaktifkan opsi &quot;Wajib Deposit bagi Internal&quot;.
+              </p>
+            )}
           </div>
         </Card>
 
         {/* Section D - Fasilitas */}
         <Card style={{ padding: '1.5rem' }}>
           <SectionTitle>D — Fasilitas & Aset Ruangan</SectionTitle>
+
+          <div style={{ marginBottom: '1.5rem' }}>
+            <FormLabel>Fasilitas Ruangan</FormLabel>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+              {FACILITIES_LIST.map((item) => {
+                const checked = facilities.includes(item);
+                return (
+                  <label
+                    key={item}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      cursor: 'pointer',
+                      fontSize: '0.88rem',
+                      padding: '0.4rem 0.6rem',
+                      border: '1px solid',
+                      borderColor: checked ? 'var(--color-primary)' : 'var(--color-border)',
+                      background: checked ? 'rgba(79, 70, 229, 0.04)' : 'transparent',
+                      borderRadius: 'var(--radius-sm)',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleFacility(item)}
+                      style={{ cursor: 'pointer', accentColor: 'var(--color-primary)' }}
+                    />
+                    <span>{item}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
 
           <div>
             <FormLabel>Aset Fisik Terpasang (Terintegrasi ke Data Aset)</FormLabel>

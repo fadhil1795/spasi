@@ -113,6 +113,10 @@ export async function POST(request: Request) {
       where: { id: userId }
     });
 
+    if (user && user.role === 'BORROWER' && user.renterCategory === 'EXTERNAL') {
+      return NextResponse.json({ error: 'Akses terbatas bagi pengguna Eksternal. Silakan ajukan verifikasi akun terlebih dahulu.' }, { status: 403 });
+    }
+
     if (user) {
       let appliedRule = await prisma.quotaRule.findFirst({
         where: { targetType: 'USER', targetId: userId }
@@ -193,6 +197,23 @@ export async function POST(request: Request) {
     const room = await prisma.location.findUnique({ where: { id: locationId } });
     if (!room) return NextResponse.json({ error: 'Ruangan tidak ditemukan' }, { status: 404 });
 
+    // Validate access based on isLoanable & isRentable settings
+    const requesterRole = (session?.user as any)?.role || 'BORROWER';
+    const requesterCategory = (session?.user as any)?.renterCategory || 'EXTERNAL';
+
+    if (requesterRole === 'BORROWER') {
+      if (requesterCategory === 'EXTERNAL') {
+        if (!room.isRentable) {
+          return NextResponse.json({ error: 'Akses terbatas. Ruangan ini tidak disewakan untuk Eksternal.' }, { status: 403 });
+        }
+      } else {
+        // Internal
+        if (!room.isLoanable && !room.isRentable) {
+          return NextResponse.json({ error: 'Akses ditutup. Ruangan ini sedang dinonaktifkan.' }, { status: 403 });
+        }
+      }
+    }
+
     const durationHours = calculateDurationHours(start, end);
     const originalRoomRate = rentalType === 'DAILY' ? (room.pricePerDay || (room.pricePerHour || 0) * 8) : (room.pricePerHour || 0);
 
@@ -206,11 +227,24 @@ export async function POST(request: Request) {
     const duration = rentalType === 'DAILY' ? Math.max(1, Math.ceil(durationHours / 24)) : durationHours;
 
     if (renterCategory === 'MAHASISWA') {
-      roomRate = 0;
-      roomSubtotal = 0;
-      addonSubtotal = 0;
-      depositAmount = 0;
-      finalPayStatus = 'PAID'; // Free, auto paid
+      const isFree = room.isLoanable;
+      if (isFree) {
+        roomRate = 0;
+        roomSubtotal = 0;
+        addonSubtotal = 0;
+        depositAmount = room.requiresDepositForInternal ? (room.depositAmount || 0) : 0;
+        finalPayStatus = depositAmount > 0 ? (inputPayStatus || 'UNPAID') : 'PAID';
+      } else {
+        // Paid room for internal
+        roomRate = originalRoomRate;
+        roomSubtotal = roomRate * duration;
+        const addonList = Array.isArray(addonAssets) ? addonAssets : [];
+        addonSubtotal = addonList.reduce((sum: number, a: any) => {
+          return sum + (parseFloat(a.ratePerSession) * parseInt(a.quantity));
+        }, 0);
+        depositAmount = room.requiresDepositForInternal ? (room.depositAmount || 0) : 0;
+        finalPayStatus = inputPayStatus || 'UNPAID';
+      }
     } else if (renterCategory === 'EXTERNAL_PINJAM') {
       roomRate = 0;
       roomSubtotal = 0;

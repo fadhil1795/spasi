@@ -33,6 +33,9 @@ model Location {
   pricePerHour       Float?                  // tarif sewa per jam
   pricePerDay        Float?                  // tarif sewa per hari
   depositAmount      Float?                  // nominal deposit jaminan (refundable)
+  isRentable                 Boolean                 @default(false)
+  isLoanable                 Boolean                 @default(true)
+  requiresDepositForInternal Boolean                 @default(false)
   description        String?                 @db.Text        // deskripsi & aturan penggunaan ruangan
   status             String                  @default("AVAILABLE") // AVAILABLE, RENTED, MAINTENANCE, INACTIVE
   facilities         String                  @db.Text // JSON string array of fasilitas ruangan

@@ -45,6 +45,7 @@ export const authOptions: NextAuthOptions = {
           email: user.email,
           role: user.role,
           departmentId: user.departmentId,
+          renterCategory: user.renterCategory,
         };
       },
     }),
@@ -83,11 +84,13 @@ export const authOptions: NextAuthOptions = {
           token.id = dbUser.id;
           token.role = dbUser.role;
           token.departmentId = dbUser.departmentId;
+          token.renterCategory = dbUser.renterCategory;
         }
       } else if (user) {
         token.id = user.id;
         token.role = (user as any).role;
         token.departmentId = (user as any).departmentId;
+        token.renterCategory = (user as any).renterCategory;
       }
       return token;
     },
@@ -96,6 +99,7 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).id = token.id;
         (session.user as any).role = token.role;
         (session.user as any).departmentId = token.departmentId;
+        (session.user as any).renterCategory = token.renterCategory;
       }
       return session;
     },

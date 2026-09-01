@@ -41,6 +41,7 @@ export async function POST(request: Request) {
       code, name, building, floor, room, area, capacity,
       pricePerHour, pricePerDay, depositAmount, description,
       status, facilities, photos,
+      isRentable, isLoanable, requiresDepositForInternal,
     } = body;
 
     if (!name || !building) {
@@ -65,6 +66,9 @@ export async function POST(request: Request) {
         pricePerHour: pricePerHour ? parseFloat(pricePerHour) : null,
         pricePerDay: pricePerDay ? parseFloat(pricePerDay) : null,
         depositAmount: depositAmount ? parseFloat(depositAmount) : null,
+        isRentable: isRentable === undefined ? false : Boolean(isRentable),
+        isLoanable: isLoanable === undefined ? true : Boolean(isLoanable),
+        requiresDepositForInternal: requiresDepositForInternal === undefined ? false : Boolean(requiresDepositForInternal),
         description: description || null,
         status: status || 'AVAILABLE',
         facilities: JSON.stringify(Array.isArray(facilities) ? facilities : []),

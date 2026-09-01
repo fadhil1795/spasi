@@ -1229,7 +1229,7 @@ export default function SettingsPage() {
 
 
 
-      {activeTab === 'system' && (
+      {activeTab === 'system' && isAdmin && (
         <form onSubmit={(e) => { e.preventDefault(); saveSystemSettings(); }}>
           <Card style={{ padding: '2rem' }}>
             <div style={{ marginBottom: '1.5rem' }}>
@@ -1272,7 +1272,7 @@ export default function SettingsPage() {
       )}
 
       {/* ── TAB: TEMPLATE DOKUMEN ───────────────────────────────────── */}
-      {activeTab === 'template' && (
+      {activeTab === 'template' && isAdmin && (
         <form onSubmit={(e) => { e.preventDefault(); saveTemplateSettings(); }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 

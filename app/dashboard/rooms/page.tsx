@@ -24,6 +24,9 @@ interface Room {
   pricePerHour: number | null;
   status: RoomStatus;
   photos: string[];
+  isRentable?: boolean;
+  isLoanable?: boolean;
+  requiresDepositForInternal?: boolean;
   _count?: { assets: number };
 }
 
@@ -195,6 +198,18 @@ function RoomCard({ room }: { room: Room }) {
             <Building2 size={40} opacity={0.3} />
           </div>
         )}
+        <div style={{ position: 'absolute', top: '0.75rem', left: '0.75rem', display: 'flex', gap: '0.3rem', flexDirection: 'column' }}>
+          {room.isLoanable && (
+            <span style={{ fontSize: '0.68rem', padding: '0.15rem 0.4rem', borderRadius: '4px', background: '#22c55e', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              Pinjam (Internal)
+            </span>
+          )}
+          {room.isRentable && (
+            <span style={{ fontSize: '0.68rem', padding: '0.15rem 0.4rem', borderRadius: '4px', background: '#3b82f6', color: '#fff', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
+              Sewa (Berbayar)
+            </span>
+          )}
+        </div>
         <div style={{ position: 'absolute', top: '0.75rem', right: '0.75rem' }}>
           <Badge status={room.status} />
         </div>

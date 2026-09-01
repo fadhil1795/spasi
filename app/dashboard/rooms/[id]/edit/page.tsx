@@ -30,6 +30,9 @@ export default function EditRoomPage() {
     pricePerHour: '',
     pricePerDay: '',
     depositAmount: '',
+    isRentable: false,
+    isLoanable: true,
+    requiresDepositForInternal: false,
     description: '',
     status: 'AVAILABLE',
     facilities: [] as string[],
@@ -84,6 +87,9 @@ export default function EditRoomPage() {
           pricePerHour: data.pricePerHour ? String(data.pricePerHour) : '',
           pricePerDay: data.pricePerDay ? String(data.pricePerDay) : '',
           depositAmount: data.depositAmount ? String(data.depositAmount) : '',
+          isRentable: data.isRentable !== undefined ? Boolean(data.isRentable) : false,
+          isLoanable: data.isLoanable !== undefined ? Boolean(data.isLoanable) : true,
+          requiresDepositForInternal: data.requiresDepositForInternal !== undefined ? Boolean(data.requiresDepositForInternal) : false,
           description: data.description || '',
           status: data.status || 'AVAILABLE',
           facilities: data.facilities ? (typeof data.facilities === 'string' ? JSON.parse(data.facilities) : data.facilities) : [],
@@ -338,10 +344,57 @@ export default function EditRoomPage() {
                 className="input-field"
                 placeholder="200000"
                 value={formData.depositAmount}
-                onChange={(e) => setFormData({ ...formData, depositAmount: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFormData({
+                    ...formData,
+                    depositAmount: val,
+                    requiresDepositForInternal: val ? formData.requiresDepositForInternal : false
+                  });
+                }}
                 style={{ width: '100%' }}
               />
             </div>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '1.5rem' }}>
+            <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.88rem' }}>
+                <input
+                  type="checkbox"
+                  checked={formData.isLoanable}
+                  onChange={(e) => setFormData({ ...formData, isLoanable: e.target.checked })}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <span>Bisa Dipinjam (Gratis untuk Internal)</span>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.88rem' }}>
+                <input
+                  type="checkbox"
+                  checked={formData.isRentable}
+                  onChange={(e) => setFormData({ ...formData, isRentable: e.target.checked })}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <span>Bisa Disewa (Berbayar untuk Eksternal / Internal)</span>
+              </label>
+
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.88rem', opacity: formData.depositAmount ? 1 : 0.5 }}>
+                <input
+                  type="checkbox"
+                  checked={formData.requiresDepositForInternal}
+                  disabled={!formData.depositAmount}
+                  onChange={(e) => setFormData({ ...formData, requiresDepositForInternal: e.target.checked })}
+                  style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                />
+                <span>Wajib Deposit bagi Internal</span>
+              </label>
+            </div>
+            {!formData.depositAmount && (
+              <p style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginTop: '-0.5rem' }}>
+                * Jaminan deposit harus diisi untuk mengaktifkan opsi &quot;Wajib Deposit bagi Internal&quot;.
+              </p>
+            )}
           </div>
         </Card>
 
@@ -350,6 +403,41 @@ export default function EditRoomPage() {
           <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>
             Fasilitas & Aset Ruangan
           </h3>
+
+          <div style={{ marginBottom: '1.5rem' }}>
+            <label className="input-label" style={{ marginBottom: '0.5rem', display: 'block' }}>Fasilitas Ruangan</label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
+              {FASILITAS_OPTIONS.map((item) => {
+                const checked = formData.facilities.includes(item);
+                return (
+                  <label
+                    key={item}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      cursor: 'pointer',
+                      fontSize: '0.88rem',
+                      padding: '0.4rem 0.6rem',
+                      border: '1px solid',
+                      borderColor: checked ? 'var(--color-primary)' : 'var(--color-border)',
+                      background: checked ? 'rgba(79, 70, 229, 0.04)' : 'transparent',
+                      borderRadius: 'var(--radius-sm)',
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => handleFacilityToggle(item)}
+                      style={{ cursor: 'pointer', accentColor: 'var(--color-primary)' }}
+                    />
+                    <span>{item}</span>
+                  </label>
+                );
+              })}
+            </div>
+          </div>
 
           <div>
             <label className="input-label">Aset Fisik Terpasang (Terintegrasi ke Data Aset)</label>
