@@ -8,12 +8,12 @@ services:
     container_name: spasi-web
     restart: always
     ports:
-      - "3000:3000"
+      - "3005:3005"
     environment:
       - NODE_ENV=production
-      - PORT=3000
+      - PORT=3005
       - DATABASE_URL=${DATABASE_URL:-mysql://spasi_user:spasi_secret_password@spasi-mysql:3306/spasi_db}
-      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3000}
+      - NEXTAUTH_URL=${NEXTAUTH_URL:-http://localhost:3005}
       - NEXTAUTH_SECRET=${NEXTAUTH_SECRET:-changeme-production-secret-key-32chars}
       - AUTO_DB_PUSH=${AUTO_DB_PUSH:-true}
       - SEED_DB=${SEED_DB:-false}

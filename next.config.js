@@ -9,7 +9,7 @@ const nextConfig = {
     ignoreBuildErrors: false,
   },
   env: {
-    NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'http://localhost:3000',
+    NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'http://localhost:3005',
   },
   images: {
     unoptimized: true,
