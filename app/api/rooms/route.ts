@@ -18,6 +18,7 @@ export async function GET(request: Request) {
     const rooms = await prisma.location.findMany({
       where,
       include: {
+        department: { select: { id: true, name: true, code: true } },
         _count: { select: { assets: true, roomBookings: true } },
       },
       orderBy: { building: 'asc' },
@@ -40,7 +41,7 @@ export async function POST(request: Request) {
     const {
       code, name, building, floor, room, area, capacity,
       pricePerHour, pricePerDay, depositAmount, description,
-      status, facilities, photos,
+      status, facilities, photos, departmentId,
       isRentable, isLoanable, requiresDepositForInternal,
     } = body;
 
@@ -58,9 +59,10 @@ export async function POST(request: Request) {
       data: {
         code: code || null,
         name,
-        building,
+        building: building.trim(),
         floor: floor || null,
         room: room || null,
+        departmentId: departmentId || null,
         area: area ? parseFloat(area) : null,
         capacity: capacity ? parseInt(capacity) : null,
         pricePerHour: pricePerHour ? parseFloat(pricePerHour) : null,

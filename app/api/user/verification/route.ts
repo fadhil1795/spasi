@@ -38,6 +38,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'Semua field wajib diisi' }, { status: 400 });
     }
 
+    const trimmedIdentity = identityNo.trim();
+    // Validasi apakah NIM/NIP sudah terdaftar pada user lain
+    const existingIdentityUser = await prisma.user.findFirst({
+      where: {
+        identityNo: trimmedIdentity,
+        id: { not: userId },
+      },
+    });
+
+    if (existingIdentityUser) {
+      return NextResponse.json({ error: 'NIM/NIP ini sudah terdaftar pada pengguna lain' }, { status: 400 });
+    }
+
     const activeRequest = await prisma.verificationRequest.findFirst({
       where: { userId, status: 'PENDING' },
     });

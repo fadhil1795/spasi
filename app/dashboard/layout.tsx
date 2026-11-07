@@ -39,6 +39,11 @@ export default function DashboardLayout({
     const isPath = (path: string) => pathname === path || pathname.startsWith(path + '/');
 
     if (userRole === 'BORROWER') {
+      const isRoomBookingDetail = pathname.startsWith('/dashboard/room-bookings/') &&
+        !pathname.includes('/scan') &&
+        !pathname.includes('/checkin') &&
+        !pathname.includes('/checkout');
+
       if (
         isPath('/dashboard/admin') ||
         isPath('/dashboard/crm') ||
@@ -51,7 +56,7 @@ export default function DashboardLayout({
         isPath('/dashboard/categories') ||
         isPath('/dashboard/tools') ||
         isPath('/dashboard/reports') ||
-        isPath('/dashboard/room-bookings') ||
+        (isPath('/dashboard/room-bookings') && !isRoomBookingDetail) ||
         isPath('/dashboard/returns') ||
         isPath('/dashboard/loans/scan')
       ) {

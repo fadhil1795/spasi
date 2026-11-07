@@ -261,7 +261,7 @@ export default function DashboardAssetsPage() {
                           <Link href={`/dashboard/assets/${ast.id}/edit`} className="btn btn-secondary btn-sm" title="Edit Aset">
                             <Pencil size={15} /> Edit
                           </Link>
-                          <Link href={`/assets/${ast.id}`} target="_blank" className="btn btn-ghost btn-sm" title="Lihat Detail">
+                          <Link href={`/dashboard/assets/${ast.id}`} className="btn btn-ghost btn-sm" title="Lihat Detail & Riwayat Aset">
                             <Eye size={16} />
                           </Link>
                           <Link href={`/dashboard/assets/qr-labels?ids=${ast.id}`} className="btn btn-ghost btn-sm" title="Cetak QR Label">

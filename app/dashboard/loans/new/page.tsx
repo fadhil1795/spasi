@@ -151,7 +151,7 @@ function LoanWizardContent() {
     if (!startDate || !endDate) return;
     try {
       setLoadingAssets(true);
-      const res = await fetch('/api/public/assets?status=AVAILABLE');
+      const res = await fetch(`/api/public/assets?status=AVAILABLE&startDate=${encodeURIComponent(startDate)}&endDate=${encodeURIComponent(endDate)}`);
       if (res.ok) {
         const list = await res.json();
         setAvailableAssets(list);

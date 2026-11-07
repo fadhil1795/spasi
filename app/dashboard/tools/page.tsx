@@ -20,8 +20,6 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
-export const dynamic = 'force-dynamic';
-
 export default function ToolsUtilitasPage() {
   const { showToast } = useToast();
 

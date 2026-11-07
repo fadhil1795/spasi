@@ -73,6 +73,36 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       newData: { payStatus: updated.payStatus, payMethod: updated.payMethod },
     });
 
+    // Catat Buku Kas Otomatis jika pembayaran diverifikasi PAID
+    if (payStatus === 'PAID' && existingRental.payStatus !== 'PAID') {
+      try {
+        if (updated.totalAmount > 0) {
+          await prisma.cashTransaction.create({
+            data: {
+              type: 'IN',
+              category: 'RENTAL',
+              amount: updated.totalAmount,
+              referenceId: updated.bookingNumber,
+              description: `Penerimaan Pembayaran Sewa Aset: ${updated.asset?.name || 'Aset'} (#${updated.bookingNumber}) - Penyewa: ${updated.renter?.name || '-'}`,
+            },
+          });
+        }
+        if (updated.depositAmount > 0) {
+          await prisma.cashTransaction.create({
+            data: {
+              type: 'IN',
+              category: 'DEPOSIT',
+              amount: updated.depositAmount,
+              referenceId: updated.bookingNumber,
+              description: `Penerimaan Uang Jaminan / Deposit Sewa Aset: ${updated.asset?.name || 'Aset'} (#${updated.bookingNumber})`,
+            },
+          });
+        }
+      } catch (cashErr) {
+        console.error('Error recording rental cash transaction:', cashErr);
+      }
+    }
+
     return NextResponse.json(updated);
   } catch (error) {
     console.error(error);

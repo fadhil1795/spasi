@@ -10,8 +10,6 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { ArrowLeft, Save } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
-
 export default function EditAssetPage() {
   const { id } = useParams();
   const router = useRouter();
@@ -19,6 +17,7 @@ export default function EditAssetPage() {
 
   const [categories, setCategories] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -27,6 +26,7 @@ export default function EditAssetPage() {
     name: '',
     description: '',
     categoryId: '',
+    departmentId: '',
     locationId: '',
     brand: '',
     serialNumber: '',
@@ -48,14 +48,19 @@ export default function EditAssetPage() {
   const fetchAssetAndOptions = async () => {
     try {
       setLoading(true);
-      const [resAsset, resCat, resLoc] = await Promise.all([
+      const [resAsset, resCat, resLoc, resDept] = await Promise.all([
         fetch(`/api/assets/${id}`),
         fetch('/api/public/categories'),
         fetch('/api/locations'),
+        fetch('/api/departments'),
       ]);
 
       if (resCat.ok) setCategories(await resCat.json());
       if (resLoc.ok) setLocations(await resLoc.json());
+      if (resDept.ok) {
+        const depts = await resDept.json();
+        if (Array.isArray(depts)) setDepartments(depts);
+      }
 
       if (resAsset.ok) {
         const ast = await resAsset.json();
@@ -74,6 +79,7 @@ export default function EditAssetPage() {
           name: ast.name || '',
           description: ast.description || '',
           categoryId: ast.categoryId || '',
+          departmentId: ast.departmentId || '',
           locationId: ast.locationId || '',
           brand: ast.brand || '',
           serialNumber: ast.serialNumber || '',
@@ -222,15 +228,35 @@ export default function EditAssetPage() {
                 value={formData.locationId}
                 onChange={(e) => setFormData({ ...formData, locationId: e.target.value })}
               >
-                <option value="">-- Pilih Lokasi --</option>
+                <option value="">-- Tanpa Lokasi / Gudang Umum --</option>
                 {locations.map((l) => (
                   <option key={l.id} value={l.id}>
-                    {l.building} {l.room ? `- ${l.room}` : ''}
+                    {l.name || l.building} {l.room ? `- ${l.room}` : ''}
                   </option>
                 ))}
               </select>
             </div>
 
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-muted)' }}>
+                Fakultas / Unit Pemilik Aset
+              </label>
+              <select
+                className="input-field"
+                value={formData.departmentId}
+                onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
+              >
+                <option value="">-- Milik Kampus Umum / Pusat --</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name} ({d.code})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-muted)' }}>
                 Kondisi Fisik

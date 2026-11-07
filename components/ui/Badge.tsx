@@ -1,16 +1,20 @@
+'use client';
+
 import React from 'react';
 
 interface BadgeProps {
   status?: string;
+  variant?: 'available' | 'borrowed' | 'rented' | 'maintenance' | 'success' | 'warning' | 'danger' | 'info' | 'neutral' | string;
   className?: string;
+  children?: React.ReactNode;
 }
 
-export const Badge: React.FC<BadgeProps> = ({ status = '', className = '' }) => {
+export const Badge: React.FC<BadgeProps> = ({ status = '', variant, className = '', children }) => {
   let badgeClass = 'badge-available';
-  let label = status || 'N/A';
+  let label: React.ReactNode = children !== undefined ? children : (status || 'N/A');
   let hasPulse = false;
 
-  const safeStatus = (status || '').toString().toUpperCase();
+  const safeStatus = (variant || status || '').toString().toUpperCase();
 
   switch (safeStatus) {
     case 'AVAILABLE':
@@ -18,8 +22,11 @@ export const Badge: React.FC<BadgeProps> = ({ status = '', className = '' }) => 
     case 'APPROVED':
     case 'PAID':
     case 'LUNAS':
+    case 'SUCCESS':
       badgeClass = 'badge-available';
-      label = safeStatus === 'AVAILABLE' ? 'Tersedia' : safeStatus === 'APPROVED' ? 'Disetujui' : safeStatus === 'PAID' ? 'Lunas' : status;
+      if (children === undefined) {
+        label = safeStatus === 'AVAILABLE' ? 'Tersedia' : safeStatus === 'APPROVED' ? 'Disetujui' : safeStatus === 'PAID' ? 'Lunas' : status;
+      }
       break;
 
     case 'BORROWED':
@@ -28,8 +35,11 @@ export const Badge: React.FC<BadgeProps> = ({ status = '', className = '' }) => 
     case 'REJECTED':
     case 'OVERDUE':
     case 'UNPAID':
+    case 'DANGER':
       badgeClass = 'badge-borrowed';
-      label = safeStatus === 'BORROWED' ? 'Dipinjam' : safeStatus === 'ACTIVE' ? 'Aktif' : safeStatus === 'REJECTED' ? 'Ditolak' : safeStatus === 'OVERDUE' ? 'Jatuh Tempo' : safeStatus === 'UNPAID' ? 'Belum Bayar' : status;
+      if (children === undefined) {
+        label = safeStatus === 'BORROWED' ? 'Dipinjam' : safeStatus === 'ACTIVE' ? 'Aktif' : safeStatus === 'REJECTED' ? 'Ditolak' : safeStatus === 'OVERDUE' ? 'Jatuh Tempo' : safeStatus === 'UNPAID' ? 'Belum Bayar' : status;
+      }
       hasPulse = safeStatus === 'BORROWED' || safeStatus === 'ACTIVE' || safeStatus === 'OVERDUE';
       break;
 
@@ -40,15 +50,20 @@ export const Badge: React.FC<BadgeProps> = ({ status = '', className = '' }) => 
     case 'PENDING_L2':
     case 'DOWN_PAYMENT':
     case 'DP':
+    case 'WARNING':
       badgeClass = 'badge-rented';
-      label = safeStatus === 'RENTED' ? 'Disewa' : safeStatus.startsWith('PENDING') ? 'Menunggu' : safeStatus === 'DOWN_PAYMENT' ? 'DP' : status;
+      if (children === undefined) {
+        label = safeStatus === 'RENTED' ? 'Disewa' : safeStatus.startsWith('PENDING') ? 'Menunggu' : safeStatus === 'DOWN_PAYMENT' ? 'DP' : status;
+      }
       hasPulse = safeStatus === 'RENTED';
       break;
 
     case 'RETURN_REQUESTED':
     case 'UNDER_INSPECTION':
       badgeClass = 'badge-rented';
-      label = safeStatus === 'RETURN_REQUESTED' ? 'Menunggu Pemeriksaan' : 'Dalam Pemeriksaan';
+      if (children === undefined) {
+        label = safeStatus === 'RETURN_REQUESTED' ? 'Menunggu Pemeriksaan' : 'Dalam Pemeriksaan';
+      }
       hasPulse = true;
       break;
 
@@ -56,14 +71,18 @@ export const Badge: React.FC<BadgeProps> = ({ status = '', className = '' }) => 
     case 'MAINTENANCE':
     case 'REPAIR':
       badgeClass = 'badge-maintenance';
-      label = safeStatus === 'NEEDS_REPAIR' ? 'Perlu Perbaikan' : 'Maintenance';
+      if (children === undefined) {
+        label = safeStatus === 'NEEDS_REPAIR' ? 'Perlu Perbaikan' : 'Maintenance';
+      }
       break;
 
     case 'LOST_REPORTED':
     case 'DISPOSED':
     case 'DAMAGED':
       badgeClass = 'badge-borrowed';
-      label = safeStatus === 'LOST_REPORTED' ? 'Laporan Kehilangan' : safeStatus === 'DAMAGED' ? 'Rusak Berat' : 'Hilang/Dihapus';
+      if (children === undefined) {
+        label = safeStatus === 'LOST_REPORTED' ? 'Laporan Kehilangan' : safeStatus === 'DAMAGED' ? 'Rusak Berat' : 'Hilang/Dihapus';
+      }
       break;
 
     default:

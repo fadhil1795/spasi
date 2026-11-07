@@ -9,6 +9,7 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     const room = await prisma.location.findUnique({
       where: { id: params.id },
       include: {
+        department: { select: { id: true, name: true, code: true } },
         assets: {
           include: { category: { select: { name: true } } },
           orderBy: { name: 'asc' },

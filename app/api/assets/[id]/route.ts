@@ -34,6 +34,10 @@ export async function GET(
           orderBy: { startDate: 'desc' },
           take: 10,
         },
+        transfers: {
+          orderBy: { transferredAt: 'desc' },
+          take: 20,
+        },
       },
     });
 
@@ -60,34 +64,72 @@ export async function PUT(
     const body = await request.json();
     const qty = body.quantity ? Math.max(1, parseInt(body.quantity)) : 1;
 
+    // Ambil data aset sebelum diupdate untuk perbandingan
+    const existing = await prisma.asset.findUnique({
+      where: { id: params.id },
+      include: { location: true },
+    });
+
     const updatedAsset = await prisma.asset.update({
       where: { id: params.id },
       data: {
-        name: body.name,
-        description: body.description,
-        categoryId: body.categoryId,
-        locationId: body.locationId || null,
-        departmentId: body.departmentId || null,
-        status: body.status,
-        condition: body.condition,
-        quantity: qty,
-        availableQty: body.availableQty !== undefined ? Math.max(0, parseInt(body.availableQty)) : qty,
-        purchaseDate: body.purchaseDate ? new Date(body.purchaseDate) : null,
-        purchaseCost: body.purchaseCost ? parseFloat(body.purchaseCost) : null,
-        brand: body.brand,
-        serialNumber: body.serialNumber,
-        dailyRentRate: body.dailyRentRate ? parseFloat(body.dailyRentRate) : null,
-        isRentable: Boolean(body.isRentable),
-        isLoanable: Boolean(body.isLoanable),
-        images: Array.isArray(body.images) ? JSON.stringify(body.images) : body.images,
+        name: body.name !== undefined ? body.name : existing.name,
+        description: body.description !== undefined ? body.description : existing.description,
+        categoryId: body.categoryId !== undefined ? body.categoryId : existing.categoryId,
+        locationId: body.locationId !== undefined ? (body.locationId || null) : existing.locationId,
+        departmentId: body.departmentId !== undefined ? (body.departmentId || null) : existing.departmentId,
+        status: body.status !== undefined ? body.status : existing.status,
+        condition: body.condition !== undefined ? body.condition : existing.condition,
+        quantity: body.quantity !== undefined ? qty : existing.quantity,
+        availableQty: body.availableQty !== undefined ? Math.max(0, parseInt(body.availableQty)) : existing.availableQty,
+        purchaseDate: body.purchaseDate !== undefined ? (body.purchaseDate ? new Date(body.purchaseDate) : null) : existing.purchaseDate,
+        purchaseCost: body.purchaseCost !== undefined ? (body.purchaseCost ? parseFloat(body.purchaseCost) : null) : existing.purchaseCost,
+        brand: body.brand !== undefined ? body.brand : existing.brand,
+        serialNumber: body.serialNumber !== undefined ? body.serialNumber : existing.serialNumber,
+        dailyRentRate: body.dailyRentRate !== undefined ? (body.dailyRentRate ? parseFloat(body.dailyRentRate) : null) : existing.dailyRentRate,
+        isRentable: body.isRentable !== undefined ? Boolean(body.isRentable) : existing.isRentable,
+        isLoanable: body.isLoanable !== undefined ? Boolean(body.isLoanable) : existing.isLoanable,
+        images: body.images !== undefined ? (Array.isArray(body.images) ? JSON.stringify(body.images) : body.images) : existing.images,
+        customAttributes: body.customAttributes !== undefined ? (typeof body.customAttributes === 'object' ? JSON.stringify(body.customAttributes) : (body.customAttributes || null)) : existing.customAttributes,
+      },
+    });
+
+    // Jika terjadi perpindahan/mutasi lokasi, catat otomatis di TransferLog
+    if (existing && body.locationId !== undefined && body.locationId !== existing.locationId) {
+      const newLoc = body.locationId ? await prisma.location.findUnique({ where: { id: body.locationId } }) : null;
+      const fromText = existing.location ? `${existing.location.name || existing.location.building} (${existing.location.room || '-'})` : 'Gudang Umum / Tanpa Lokasi';
+      const toText = newLoc ? `${newLoc.name || newLoc.building} (${newLoc.room || '-'})` : 'Gudang Umum / Tanpa Lokasi';
+
+      await prisma.transferLog.create({
+        data: {
+          assetId: params.id,
+          fromLocation: fromText,
+          toLocation: toText,
+          transferredBy: (session.user as any).name || (session.user as any).email || 'Petugas Sarpras',
+          reason: body.transferReason || 'Perubahan penempatan / mutasi lokasi aset melalui sistem',
+        },
+      });
+    }
+
+    // Catat di AuditLog
+    await prisma.auditLog.create({
+      data: {
+        action: 'UPDATE_ASSET',
+        entity: 'Asset',
+        entityId: params.id,
+        userId: (session.user as any).id || 'system',
+        details: `Memperbarui data & spesifikasi aset ${body.name || existing?.name || params.id}`,
       },
     });
 
     return NextResponse.json(updatedAsset);
   } catch (error) {
+    console.error('Error updating asset:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }
 }
+
+export const PATCH = PUT;
 
 export async function DELETE(
   request: Request,

@@ -218,49 +218,104 @@ export default function PublicAssetDetailPage() {
 
             {/* Specifications Box */}
             <div>
-              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1rem' }}>Spesifikasi</h2>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 700, marginBottom: '1rem' }}>Spesifikasi &amp; Identitas Sarpras</h2>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
                 <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '1rem', background: 'var(--color-surface)' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.2rem' }}>Merek</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.2rem' }}>Kode Aset (Barcode)</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, fontFamily: 'monospace', color: 'var(--color-primary-light)' }}>{asset.code}</div>
+                </div>
+                <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '1rem', background: 'var(--color-surface)' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.2rem' }}>Merek &amp; Tipe</div>
                   <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>{asset.brand || '-'}</div>
                 </div>
                 <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '1rem', background: 'var(--color-surface)' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.2rem' }}>Kondisi</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.2rem' }}>Kondisi Fisik</div>
                   <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>{asset.condition || 'Baik'}</div>
                 </div>
                 <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '1rem', background: 'var(--color-surface)' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.2rem' }}>Kategori</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.2rem' }}>Kategori Katalog</div>
                   <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>{asset.category?.name || '-'}</div>
                 </div>
                 <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '1rem', background: 'var(--color-surface)' }}>
-                  <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.2rem' }}>Nomor Seri</div>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.2rem' }}>Nomor Seri Pabrik</div>
                   <div style={{ fontSize: '1.05rem', fontWeight: 700, fontFamily: 'monospace' }}>{asset.serialNumber || '-'}</div>
                 </div>
+                <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '1rem', background: 'var(--color-surface)' }}>
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.2rem' }}>Lokasi / Penempatan</div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>{asset.location?.name ? `${asset.location.name} (${asset.location.building})` : 'Gudang Sarpras'}</div>
+                </div>
+                {asset.department && (
+                  <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)', padding: '1rem', background: 'var(--color-surface)' }}>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.2rem' }}>Unit / Jurusan Pemilik</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 700 }}>{asset.department.name}</div>
+                  </div>
+                )}
               </div>
+
+              {/* Dynamic Category Attributes */}
+              {(() => {
+                let parsedAttrs: Record<string, any> = {};
+                if (asset.customAttributes) {
+                  try {
+                    parsedAttrs = JSON.parse(asset.customAttributes);
+                  } catch (e) {}
+                }
+                const keys = Object.keys(parsedAttrs).filter((k) => parsedAttrs[k]);
+                if (keys.length === 0) return null;
+
+                const labelMap: Record<string, string> = {
+                  licensePlate: 'Nomor Plat Kendaraan',
+                  color: 'Warna Fisik',
+                  engineCc: 'Kapasitas Mesin (CC)',
+                  fuelType: 'Bahan Bakar',
+                  transmission: 'Transmisi',
+                  odometer: 'Odometer (KM)',
+                  wattage: 'Konsumsi Daya (Watt)',
+                  precision: 'Tingkat Presisi Lab',
+                  calibrationDate: 'Tanggal Kalibrasi Terakhir',
+                };
+
+                return (
+                  <div style={{ marginTop: '1.25rem' }}>
+                    <h3 style={{ fontSize: '0.95rem', fontWeight: 700, color: 'var(--color-muted)', marginBottom: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      Atribut Khusus &amp; Spesifikasi Teknis
+                    </h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
+                      {keys.map((k) => (
+                        <div key={k} style={{ background: 'var(--color-surface2)', padding: '0.75rem 1rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                          <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)', textTransform: 'uppercase', fontWeight: 600 }}>{labelMap[k] || k}</div>
+                          <div style={{ fontSize: '0.95rem', fontWeight: 700, marginTop: '0.2rem' }}>{String(parsedAttrs[k])}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
 
-            {/* Inclusions & Terms Grid */}
+            {/* Inclusions & Campus Sarpras Terms Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
               <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Sudah termasuk</h3>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Standar Layanan Sarpras</h3>
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                   <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text)' }}>
-                    <CheckCircle2 size={18} style={{ color: 'var(--color-success)' }} /> Asuransi dasar (TLO)
+                    <CheckCircle2 size={18} style={{ color: 'var(--color-success)' }} /> Checklist inspeksi fisik serah terima
                   </li>
                   <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text)' }}>
-                    <CheckCircle2 size={18} style={{ color: 'var(--color-success)' }} /> Perawatan & Sanitasi
+                    <CheckCircle2 size={18} style={{ color: 'var(--color-success)' }} /> Kelengkapan kabel, tas &amp; aksesoris resmi
                   </li>
-                  <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text)' }}>
-                    <CheckCircle2 size={18} style={{ color: 'var(--color-success)' }} /> Bantuan darurat 24 jam
+                  <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-success)' }}>
+                    <CheckCircle2 size={18} style={{ color: 'var(--color-success)' }} /> Bantuan operasional &amp; asistensi teknisi Sarpras
                   </li>
                 </ul>
               </div>
               <div>
-                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Syarat singkat</h3>
+                <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Ketentuan Sarpras</h3>
                 <ul style={{ paddingLeft: '1.2rem', margin: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem', color: 'var(--color-muted)' }}>
-                  <li>Identitas aktif (KTP/Paspor)</li>
-                  <li>Usia minimum 21 tahun</li>
-                  <li>Deposit dikembalikan penuh sesuai kondisi</li>
+                  <li>Identitas aktif (KTM / NIP / KTP sah)</li>
+                  <li>Disetujui bagian Sarana &amp; Prasarana / Lab</li>
+                  <li>Wajib menjaga keutuhan &amp; kebersihan aset</li>
+                  <li>Pengembalian tepat waktu sesuai permohonan</li>
                 </ul>
               </div>
             </div>
@@ -289,16 +344,16 @@ export default function PublicAssetDetailPage() {
               
               <div style={{ marginBottom: '1.5rem' }}>
                 <div style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-muted)', letterSpacing: '1px', textTransform: 'uppercase', marginBottom: '0.4rem' }}>
-                  Harga Sewa
+                  Tarif Penggunaan
                 </div>
                 {asset.isRentable && asset.dailyRentRate ? (
                   <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.3rem' }}>
                     <span style={{ fontSize: '2rem', fontWeight: 800, color: '#111' }}>{formatCurrency(asset.dailyRentRate)}</span>
-                    <span style={{ color: 'var(--color-muted)', fontWeight: 500 }}>/hari</span>
+                    <span style={{ color: 'var(--color-muted)', fontWeight: 500 }}>/hari (Sewa Komersial)</span>
                   </div>
                 ) : (
-                  <div style={{ fontSize: '1.2rem', fontWeight: 700, color: 'var(--color-primary)' }}>
-                    Khusus Pinjam Internal
+                  <div style={{ fontSize: '1.3rem', fontWeight: 800, color: 'var(--color-success)' }}>
+                    Gratis Pinjam (Internal Kampus)
                   </div>
                 )}
               </div>
@@ -308,7 +363,7 @@ export default function PublicAssetDetailPage() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem', marginBottom: '1.5rem' }}>
                 <div>
                   <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                    Data Penyewa
+                    Data Pemohon / Penyewa
                   </label>
                   <input
                     type="text"
@@ -328,110 +383,128 @@ export default function PublicAssetDetailPage() {
 
                 <div>
                   <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
-                    Rencana Pinjam
+                    Jadwal Pemakaian
                   </label>
                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '0.9rem', color: 'var(--color-text)' }}
-                    />
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '0.9rem', color: 'var(--color-text)' }}
-                    />
+                    <div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', marginBottom: '0.2rem' }}>Mulai:</div>
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '0.9rem', color: 'var(--color-text)' }}
+                      />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', marginBottom: '0.2rem' }}>Selesai:</div>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)', fontSize: '0.9rem', color: 'var(--color-text)' }}
+                      />
+                    </div>
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ color: 'var(--color-muted)', fontSize: '0.9rem' }}>Deposit</span>
-                  <span style={{ fontWeight: 700 }}>{formatCurrency(asset.depositAmount || 50000)}</span>
-                </div>
+                {asset.isRentable && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: 'var(--color-muted)', fontSize: '0.9rem' }}>Deposit Jaminan</span>
+                    <span style={{ fontWeight: 700 }}>{formatCurrency(asset.depositAmount || 50000)}</span>
+                  </div>
+                )}
               </div>
 
-              {session?.user && (session.user as any).role === 'BORROWER' && ((session.user as any).renterCategory || 'EXTERNAL') === 'EXTERNAL' ? (
-                <div style={{
-                  background: 'rgba(239,68,68,0.05)',
-                  border: '1px dashed rgba(239,68,68,0.3)',
-                  padding: '1.25rem',
-                  borderRadius: 'var(--radius-lg)',
-                  textAlign: 'center',
-                  fontSize: '0.8rem',
-                  color: 'var(--color-muted)',
-                  lineHeight: 1.5,
-                  marginBottom: '1rem'
-                }}>
-                  <span style={{ fontWeight: 800, color: '#ef4444', display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem' }}>
-                    🔒 Tombol Pinjam Dinonaktifkan
-                  </span>
-                  Akun Anda saat ini terdaftar sebagai <strong>Penyewa Eksternal</strong>. Silakan ajukan verifikasi Mahasiswa / Internal Kampus melalui menu <strong>Verifikasi Akun</strong> untuk melakukan pemesanan.
-                </div>
-              ) : asset.isRentable ? (
-                <>
-                  <button
-                    onClick={handleBooking}
-                    style={{
-                      width: '100%',
-                      padding: '1rem',
-                      background: '#2563EB',
-                      color: '#FFF',
-                      border: 'none',
+              {(() => {
+                const isBorrower = session?.user && (session.user as any).role === 'BORROWER';
+                const renterCategory = isBorrower ? ((session.user as any).renterCategory || 'EXTERNAL') : 'EXTERNAL';
+
+                if (isBorrower && renterCategory === 'EXTERNAL' && !asset.isRentable) {
+                  return (
+                    <div style={{
+                      background: 'rgba(239,68,68,0.05)',
+                      border: '1px dashed rgba(239,68,68,0.3)',
+                      padding: '1.25rem',
                       borderRadius: 'var(--radius-lg)',
-                      fontSize: '1rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 14px rgba(37, 99, 235, 0.3)',
-                      transition: 'all 0.2s',
+                      textAlign: 'center',
+                      fontSize: '0.8rem',
+                      color: 'var(--color-muted)',
+                      lineHeight: 1.5,
                       marginBottom: '1rem'
-                    }}
-                    onMouseOver={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
-                    onMouseOut={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-                  >
-                    Sewa Aset Ini
-                  </button>
+                    }}>
+                      <span style={{ fontWeight: 800, color: '#ef4444', display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem' }}>
+                        🔒 Khusus Sivitas Akademika Internal
+                      </span>
+                      Aset ini adalah barang inventaris kampus untuk dipinjam gratis oleh Dosen/Mahasiswa/Tendik. Silakan ajukan verifikasi KTM/NIP di menu <strong>Verifikasi Akun</strong>.
+                    </div>
+                  );
+                }
+
+                if (asset.isRentable) {
+                  return (
+                    <>
+                      <button
+                        onClick={handleBooking}
+                        style={{
+                          width: '100%',
+                          padding: '1rem',
+                          background: 'var(--color-primary)',
+                          color: '#FFF',
+                          border: 'none',
+                          borderRadius: 'var(--radius-lg)',
+                          fontSize: '1rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          boxShadow: 'var(--shadow-glow)',
+                          transition: 'all 0.2s',
+                          marginBottom: '0.75rem'
+                        }}
+                      >
+                        Sewa Aset Ini
+                      </button>
+                      <button
+                        onClick={handleAddToCart}
+                        style={{
+                          width: '100%',
+                          padding: '0.85rem',
+                          background: 'var(--color-surface2)',
+                          color: 'var(--color-text)',
+                          border: '1px solid var(--color-border)',
+                          borderRadius: 'var(--radius-lg)',
+                          fontSize: '0.95rem',
+                          fontWeight: 700,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          marginBottom: '1rem'
+                        }}
+                      >
+                        + Tambah ke Keranjang
+                      </button>
+                    </>
+                  );
+                }
+
+                return (
                   <button
-                    onClick={handleAddToCart}
+                    onClick={() => router.push(`/dashboard/loans/new?assetId=${asset.id}`)}
                     style={{
-                      width: '100%',
-                      padding: '1rem',
-                      background: '#F3F4F6',
-                      color: '#111827',
-                      border: '1px solid #D1D5DB',
-                      borderRadius: 'var(--radius-lg)',
-                      fontSize: '1rem',
-                      fontWeight: 700,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s',
-                      marginBottom: '1rem'
+                      width: '100%', padding: '1rem', background: 'var(--color-primary)',
+                      color: '#FFFFFF', border: 'none', borderRadius: 'var(--radius-lg)',
+                      fontSize: '1rem', fontWeight: 700, cursor: 'pointer', marginBottom: '1rem',
+                      boxShadow: 'var(--shadow-glow)'
                     }}
-                    onMouseOver={(e) => (e.currentTarget.style.background = '#E5E7EB')}
-                    onMouseOut={(e) => (e.currentTarget.style.background = '#F3F4F6')}
                   >
-                    + Tambah ke Keranjang
+                    Ajukan Pinjam (Internal)
                   </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => router.push(`/dashboard/loans/new?assetId=${asset.id}`)}
-                  style={{
-                    width: '100%', padding: '1rem', background: 'var(--color-surface2)',
-                    color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-lg)',
-                    fontSize: '1rem', fontWeight: 700, cursor: 'pointer', marginBottom: '1rem'
-                  }}
-                >
-                  Ajukan Pinjam (Internal)
-                </button>
-              )}
+                );
+              })()}
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: 'var(--color-success)' }}>
-                  <ShieldCheck size={16} /> Tanpa biaya tersembunyi
+                  <ShieldCheck size={16} /> Aset terdaftar resmi dalam SIM Sarpras
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.8rem', color: 'var(--color-success)' }}>
-                  <ShieldCheck size={16} /> Batal gratis H-2
+                  <ShieldCheck size={16} /> Pengecekan kondisi &amp; serah terima transparan
                 </div>
               </div>
 

@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
-import { ArrowLeft, Save, Plus, X, Package, Building2 } from 'lucide-react';
+import { ArrowLeft, Save, Plus, X, Package, Building2, Sparkles } from 'lucide-react';
 
 const FASILITAS_OPTIONS = ['AC', 'Proyektor', 'Smart TV', 'Sound System', 'WiFi', 'Whiteboard', 'Podium', 'Mic Wireless', 'Laptop', 'Kamera'];
 
@@ -18,11 +18,17 @@ function NewAssetForm() {
 
   const [categories, setCategories] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   // Checklist aksesori
   const [checklistItems, setChecklistItems] = useState<string[]>([]);
   const [newChecklistItem, setNewChecklistItem] = useState('');
+
+  // Atribut kustom dinamis
+  const [customAttributes, setCustomAttributes] = useState<Record<string, string>>({});
+  const [extraAttrKey, setExtraAttrKey] = useState('');
+  const [extraAttrVal, setExtraAttrVal] = useState('');
 
   const prefilledRoomId = searchParams.get('roomId') || '';
 
@@ -30,6 +36,7 @@ function NewAssetForm() {
     name: '',
     description: '',
     categoryId: '',
+    departmentId: '',
     locationId: prefilledRoomId,
     brand: '',
     serialNumber: '',
@@ -53,9 +60,10 @@ function NewAssetForm() {
 
   const fetchOptions = async () => {
     try {
-      const [resC, resL] = await Promise.all([
+      const [resC, resL, resD] = await Promise.all([
         fetch('/api/public/categories'),
         fetch('/api/rooms'),
+        fetch('/api/departments'),
       ]);
       if (resC.ok) {
         const cats = await resC.json();
@@ -63,6 +71,10 @@ function NewAssetForm() {
         if (cats.length > 0) setFormData((prev) => ({ ...prev, categoryId: cats[0].id }));
       }
       if (resL.ok) setLocations(await resL.json());
+      if (resD.ok) {
+        const depts = await resD.json();
+        if (Array.isArray(depts)) setDepartments(depts);
+      }
     } catch (e) {
       console.error(e);
     }
@@ -106,7 +118,8 @@ function NewAssetForm() {
           ...formData,
           images: imagesArray,
           checklistItems,
-          locationId: formData.isFixedToRoom ? formData.locationId : '',
+          customAttributes,
+          locationId: formData.locationId || null,
         }),
       });
 
@@ -210,6 +223,22 @@ function NewAssetForm() {
             </div>
 
             <div>
+              <label style={labelStyle}>Fakultas / Unit Pemilik Aset</label>
+              <select
+                className="input-field"
+                value={formData.departmentId}
+                onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
+              >
+                <option value="">-- Milik Kampus Umum / Pusat --</option>
+                {departments.map((d) => (
+                  <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+            <div>
               <label style={labelStyle}>Kondisi Fisik Awal</label>
               <select
                 className="input-field"
@@ -220,6 +249,18 @@ function NewAssetForm() {
                 <option value="Sangat Baik">Sangat Baik</option>
                 <option value="Ada Minus">Ada Minus / Goresan</option>
                 <option value="Rusak Ringan">Rusak Ringan</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={labelStyle}>Status Aset Awal</label>
+              <select
+                className="input-field"
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              >
+                <option value="AVAILABLE">Tersedia (AVAILABLE)</option>
+                <option value="MAINTENANCE">Dalam Perawatan (MAINTENANCE)</option>
               </select>
             </div>
           </div>
@@ -275,11 +316,177 @@ function NewAssetForm() {
           </div>
         </div>
 
-        {/* Seksi B: Checklist Aksesori */}
+        {/* Seksi B: Atribut Khusus Kategori (FR-01) */}
+        {(() => {
+          const selectedCat = categories.find((c) => c.id === formData.categoryId);
+          const catName = (selectedCat?.name || '').toLowerCase();
+          const isVehicle = catName.includes('kendaraan') || catName.includes('mobil') || catName.includes('motor');
+          const isLabOrTech = catName.includes('lab') || catName.includes('elektronik') || catName.includes('alat');
+
+          return (
+            <div style={sectionStyle}>
+              <div style={sectionTitleStyle}>
+                <Sparkles size={18} style={{ color: 'var(--color-primary)' }} />
+                B. Atribut Spesifik Kategori ({selectedCat?.name || 'Aset'})
+              </div>
+              <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)', marginTop: '-0.75rem' }}>
+                Field adaptif sesuai jenis kategori aset yang dipilih (FR-01: Atribut Dinamis).
+              </p>
+
+              {isVehicle && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+                  <Input
+                    label="Nomor Plat Polisi *"
+                    placeholder="Contoh: B 1234 ABC"
+                    value={customAttributes.licensePlate || ''}
+                    onChange={(e) => setCustomAttributes({ ...customAttributes, licensePlate: e.target.value })}
+                  />
+                  <Input
+                    label="Warna Kendaraan"
+                    placeholder="Hitam Metalik / Putih"
+                    value={customAttributes.color || ''}
+                    onChange={(e) => setCustomAttributes({ ...customAttributes, color: e.target.value })}
+                  />
+                  <Input
+                    label="Kapasitas Mesin (CC)"
+                    placeholder="1500 cc / 2000 cc"
+                    value={customAttributes.engineCapacity || ''}
+                    onChange={(e) => setCustomAttributes({ ...customAttributes, engineCapacity: e.target.value })}
+                  />
+                  <div>
+                    <label style={labelStyle}>Bahan Bakar</label>
+                    <select
+                      className="input-field"
+                      value={customAttributes.fuelType || 'BENSIN'}
+                      onChange={(e) => setCustomAttributes({ ...customAttributes, fuelType: e.target.value })}
+                    >
+                      <option value="BENSIN">Bensin / Pertalite / Pertamax</option>
+                      <option value="SOLAR">Solar / Diesel</option>
+                      <option value="LISTRIK">Kendaraan Listrik (EV)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={labelStyle}>Transmisi</label>
+                    <select
+                      className="input-field"
+                      value={customAttributes.transmission || 'MANUAL'}
+                      onChange={(e) => setCustomAttributes({ ...customAttributes, transmission: e.target.value })}
+                    >
+                      <option value="MANUAL">Manual</option>
+                      <option value="MATIC">Otomatis / Matic</option>
+                    </select>
+                  </div>
+                  <Input
+                    label="Odometer (KM Saat Ini)"
+                    type="number"
+                    placeholder="12500"
+                    value={customAttributes.odometer || ''}
+                    onChange={(e) => setCustomAttributes({ ...customAttributes, odometer: e.target.value })}
+                  />
+                </div>
+              )}
+
+              {isLabOrTech && (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+                  <Input
+                    label="Konsumsi Daya Listrik"
+                    placeholder="Contoh: 350 Watt / 220V"
+                    value={customAttributes.wattage || ''}
+                    onChange={(e) => setCustomAttributes({ ...customAttributes, wattage: e.target.value })}
+                  />
+                  <Input
+                    label="Rentang Presisi / Akurasi"
+                    placeholder="Contoh: ±0.01 mm / 0.1 mg"
+                    value={customAttributes.precision || ''}
+                    onChange={(e) => setCustomAttributes({ ...customAttributes, precision: e.target.value })}
+                  />
+                  <Input
+                    label="Tgl Kalibrasi Terakhir"
+                    type="date"
+                    value={customAttributes.lastCalibrationDate || ''}
+                    onChange={(e) => setCustomAttributes({ ...customAttributes, lastCalibrationDate: e.target.value })}
+                  />
+                </div>
+              )}
+
+              {/* Atribut Kustom Tambahan (Key-Value) */}
+              <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px dashed var(--color-border)' }}>
+                <div style={{ fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+                  Parameter Tambahan Mandiri (Key-Value)
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Nama Parameter (mis. Resolusi / Port Output)"
+                    value={extraAttrKey}
+                    onChange={(e) => setExtraAttrKey(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <input
+                    type="text"
+                    className="input-field"
+                    placeholder="Nilai (mis. 4K 60fps / HDMI, Type-C)"
+                    value={extraAttrVal}
+                    onChange={(e) => setExtraAttrVal(e.target.value)}
+                    style={{ flex: 1 }}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => {
+                      if (!extraAttrKey.trim()) return;
+                      setCustomAttributes({ ...customAttributes, [extraAttrKey.trim()]: extraAttrVal.trim() });
+                      setExtraAttrKey('');
+                      setExtraAttrVal('');
+                    }}
+                  >
+                    <Plus size={16} /> Tambah
+                  </Button>
+                </div>
+
+                {Object.keys(customAttributes).length > 0 && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    {Object.entries(customAttributes).map(([k, v]) => (
+                      <span
+                        key={k}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '0.4rem',
+                          background: 'var(--color-surface2)',
+                          border: '1px solid var(--color-border)',
+                          padding: '0.25rem 0.6rem',
+                          borderRadius: 'var(--radius-sm)',
+                          fontSize: '0.8rem',
+                        }}
+                      >
+                        <strong>{k}:</strong> {v}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updated = { ...customAttributes };
+                            delete updated[k];
+                            setCustomAttributes(updated);
+                          }}
+                          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: 'var(--color-danger)' }}
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* Seksi C: Checklist Aksesori */}
         <div style={sectionStyle}>
           <div style={sectionTitleStyle}>
             <Package size={18} style={{ color: 'var(--color-accent)' }} />
-            B. Checklist Kelengkapan Aksesori
+            C. Checklist Kelengkapan Aksesori
           </div>
           <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)', marginTop: '-0.75rem' }}>
             Daftar item ini akan muncul sebagai checklist wajib saat aset dipinjam/dikembalikan.
@@ -331,11 +538,11 @@ function NewAssetForm() {
           )}
         </div>
 
-        {/* Seksi C: Penempatan Aset */}
+        {/* Seksi D: Penempatan Aset */}
         <div style={sectionStyle}>
           <div style={sectionTitleStyle}>
             <Building2 size={18} style={{ color: 'var(--color-warning)' }} />
-            C. Penempatan Aset
+            D. Penempatan Aset & Lokasi Fisik
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -344,12 +551,29 @@ function NewAssetForm() {
                 type="radio"
                 name="assetType"
                 checked={!formData.isFixedToRoom}
-                onChange={() => setFormData({ ...formData, isFixedToRoom: false, locationId: '' })}
+                onChange={() => setFormData({ ...formData, isFixedToRoom: false })}
                 style={{ marginTop: '2px' }}
               />
-              <div>
+              <div style={{ flex: 1 }}>
                 <div style={{ fontWeight: 700, fontSize: '0.9rem' }}>📦 Aset Bergerak (Mobile Asset)</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--color-muted)', marginTop: '0.2rem' }}>Disimpan di gudang umum. Dapat dipinjam/disewa secara mandiri atau dijadikan Add-On sewa ruangan.</div>
+                <div style={{ fontSize: '0.8rem', color: 'var(--color-muted)', marginTop: '0.2rem' }}>Dapat dipindahkan, dipinjam mandiri, atau dibawa antar ruangan/lapangan.</div>
+                {!formData.isFixedToRoom && (
+                  <div style={{ marginTop: '0.75rem' }}>
+                    <label style={labelStyle}>Ruang Penyimpanan / Gudang Fisik (Opsional)</label>
+                    <select
+                      className="input-field"
+                      value={formData.locationId}
+                      onChange={(e) => setFormData({ ...formData, locationId: e.target.value })}
+                    >
+                      <option value="">-- Pilih Pos / Gudang Penyimpanan --</option>
+                      {locations.map((l: any) => (
+                        <option key={l.id} value={l.id}>
+                          {l.name || l.building} {l.code ? `(${l.code})` : ''} - {l.building}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             </label>
 
@@ -387,9 +611,9 @@ function NewAssetForm() {
           </div>
         </div>
 
-        {/* Seksi D: Opsi Sewa & Pinjam */}
+        {/* Seksi E: Opsi Sewa & Pinjam */}
         <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>D. Opsi Peminjaman & Penyewaan</div>
+          <div style={sectionTitleStyle}>E. Opsi Peminjaman & Penyewaan</div>
 
           <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem' }}>
@@ -430,9 +654,9 @@ function NewAssetForm() {
           )}
         </div>
 
-        {/* Seksi E: Foto */}
+        {/* Seksi F: Foto */}
         <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>E. Foto Aset (Opsional)</div>
+          <div style={sectionTitleStyle}>F. Foto Aset (Opsional)</div>
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
             <input
               className="input-field"

@@ -23,6 +23,8 @@ export default function UserVerificationPage() {
   const [fullName, setFullName] = useState('');
   const [identityNo, setIdentityNo] = useState('');
   const [departmentName, setDepartmentName] = useState('');
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [isCustomDept, setIsCustomDept] = useState(false);
   const [requestedCategory, setRequestedCategory] = useState('MAHASISWA');
   const [ktmUrl, setKtmUrl] = useState('');
 
@@ -31,10 +33,23 @@ export default function UserVerificationPage() {
 
   useEffect(() => {
     fetchRequests();
+    fetchDepartments();
     if (session?.user) {
       setFullName(session.user.name || '');
     }
   }, [session]);
+
+  const fetchDepartments = async () => {
+    try {
+      const res = await fetch('/api/departments');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) setDepartments(data);
+      }
+    } catch {
+      // silently ignore
+    }
+  };
 
   const fetchRequests = async () => {
     try {
@@ -273,13 +288,39 @@ export default function UserVerificationPage() {
                   </div>
                   <div>
                     <label className="input-label">Program Studi / Departemen / Unit</label>
-                    <input
-                      type="text"
+                    <select
                       className="input-field"
-                      placeholder="Contoh: Teknik Informatika / Biro Umum"
-                      value={departmentName}
-                      onChange={(e) => setDepartmentName(e.target.value)}
-                    />
+                      style={{ width: '100%' }}
+                      value={isCustomDept ? 'OTHER' : departmentName}
+                      onChange={(e) => {
+                        if (e.target.value === 'OTHER') {
+                          setIsCustomDept(true);
+                          setDepartmentName('');
+                        } else {
+                          setIsCustomDept(false);
+                          setDepartmentName(e.target.value);
+                        }
+                      }}
+                    >
+                      <option value="">-- Pilih Unit / Fakultas --</option>
+                      {departments.map((d: any) => (
+                        <option key={d.id} value={d.name}>
+                          {d.name} ({d.code})
+                        </option>
+                      ))}
+                      <option value="OTHER">Lainnya (Tulis Manual)...</option>
+                    </select>
+                    {isCustomDept && (
+                      <input
+                        type="text"
+                        className="input-field"
+                        placeholder="Ketik nama unit/prodi..."
+                        value={departmentName}
+                        onChange={(e) => setDepartmentName(e.target.value)}
+                        style={{ marginTop: '0.4rem' }}
+                        autoFocus
+                      />
+                    )}
                   </div>
                 </div>
 

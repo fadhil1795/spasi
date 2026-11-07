@@ -103,6 +103,7 @@ export async function POST(request: Request, { params }: { params: { id: string 
           overtimeHours,
           overtimeFee,
           payStatus: hasClaim ? 'CLAIMED' : (booking.payStatus === 'DOWN_PAYMENT' ? 'PAID' : 'REFUNDED'),
+          refundStatus: !hasClaim && booking.depositAmount > 0 ? 'REFUNDED' : (hasClaim ? 'NONE' : (booking.refundStatus || 'NONE')),
           notes: generalNotes ? `[Check-Out]: ${generalNotes}\n${booking.notes || ''}` : booking.notes,
         },
       });
@@ -122,6 +123,32 @@ export async function POST(request: Request, { params }: { params: { id: string 
             data: { status: 'AVAILABLE' },
           });
         }
+      }
+
+      // Catat Buku Kas Otomatis: Pengembalian Deposit jika tidak ada klaim kerusakan
+      if (!hasClaim && booking.depositAmount > 0) {
+        await tx.cashTransaction.create({
+          data: {
+            type: 'OUT',
+            category: 'DEPOSIT',
+            amount: booking.depositAmount,
+            referenceId: booking.bookingNumber,
+            description: `Pengembalian Uang Jaminan / Deposit Sewa Ruangan: #${booking.bookingNumber} (${booking.renter?.name || '-'})`,
+          },
+        });
+      }
+
+      // Catat Buku Kas Otomatis: Overtime Fee jika ada keterlambatan check-out
+      if (overtimeFee > 0) {
+        await tx.cashTransaction.create({
+          data: {
+            type: 'IN',
+            category: 'PENALTY',
+            amount: overtimeFee,
+            referenceId: booking.bookingNumber,
+            description: `Denda Biaya Tambahan Keterlambatan Check-Out (${overtimeHours} Jam) Ruangan: #${booking.bookingNumber}`,
+          },
+        });
       }
 
       // If claim exists, create AssetClaim and Violation records

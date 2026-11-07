@@ -13,8 +13,6 @@ import {
   QrCode, Upload, CheckCircle2, Package, ShieldCheck, Building, ClipboardList
 } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
-
 function SectionTitle({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <h2 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

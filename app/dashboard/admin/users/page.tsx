@@ -11,7 +11,8 @@ import {
   Users, Shield, CalendarCheck, Clipboard, FileText,
   KeyRound, Bell, CheckSquare, Search, Plus, Trash2,
   Save, ShieldCheck, ShieldAlert, Sliders, Settings2,
-  Lock, RefreshCw, AlertCircle, Award, Building2
+  Lock, Unlock, RefreshCw, AlertCircle, Award, Building2,
+  Edit, Check, UserCheck, UserX, Phone, Mail
 } from 'lucide-react';
 
 type Tab = 'users' | 'rbac' | 'approvals' | 'departments' | 'audit' | 'notifications' | 'security';
@@ -32,15 +33,52 @@ export default function AdminUsersPage() {
   const { showToast } = useToast();
 
   const userRole = (session?.user as any)?.role || '';
-  if (userRole && userRole !== 'SUPER_ADMIN') {
-    router.push('/dashboard');
-    return null;
-  }
+  useEffect(() => {
+    if (userRole && !['SUPER_ADMIN', 'ADMIN'].includes(userRole)) {
+      router.push('/dashboard');
+    }
+  }, [userRole, router]);
 
   const [activeTab, setActiveTab] = useState<Tab>('users');
   const [users, setUsers] = useState<any[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState('ALL');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+
+  // Customer Support states: Reset Password
+  const [resetModalOpen, setResetModalOpen] = useState(false);
+  const [targetUser, setTargetUser] = useState<any>(null);
+  const [customPassword, setCustomPassword] = useState('User@123');
+  const [resetting, setResetting] = useState(false);
+
+  // Customer Support states: Edit User
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editForm, setEditForm] = useState({
+    id: '',
+    name: '',
+    email: '',
+    role: 'BORROWER',
+    renterCategory: 'MAHASISWA',
+    phone: '',
+    identityNo: '',
+    departmentId: '',
+  });
+  const [editing, setEditing] = useState(false);
+
+  // Customer Support states: Add User
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [newForm, setNewForm] = useState({
+    name: '',
+    email: '',
+    password: 'User@123',
+    role: 'BORROWER',
+    renterCategory: 'MAHASISWA',
+    phone: '',
+    identityNo: '',
+    departmentId: '',
+  });
+  const [adding, setAdding] = useState(false);
 
   // Approvals & security states
   const [configs, setConfigs] = useState<any[]>([]);
@@ -67,12 +105,134 @@ export default function AdminUsersPage() {
   const fetchUsers = useCallback(async () => {
     setUsersLoading(true);
     try {
-      const res = await fetch('/api/crm/borrowers?type=user');
+      const q = new URLSearchParams();
+      if (search) q.append('search', search);
+      if (roleFilter !== 'ALL') q.append('role', roleFilter);
+      if (statusFilter !== 'ALL') q.append('status', statusFilter);
+      const res = await fetch(`/api/admin/users?${q.toString()}`);
       const data = await res.json();
       setUsers(data.data || []);
     } catch { }
     finally { setUsersLoading(false); }
-  }, []);
+  }, [search, roleFilter, statusFilter]);
+
+  const handleResetPassword = async () => {
+    if (!targetUser) return;
+    setResetting(true);
+    try {
+      const res = await fetch(`/api/admin/users/${targetUser.id}/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ newPassword: customPassword }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(data.message || 'Password berhasil di-reset', 'success');
+        setResetModalOpen(false);
+      } else {
+        showToast(data.error || 'Gagal me-reset password', 'error');
+      }
+    } catch {
+      showToast('Terjadi kesalahan jaringan', 'error');
+    } finally {
+      setResetting(false);
+    }
+  };
+
+  const handleToggleSuspend = async (user: any) => {
+    const actionText = user.isSuspended ? 'mengaktifkan kembali' : 'menangguhkan (suspend)';
+    if (!confirm(`Apakah Anda yakin ingin ${actionText} akun ${user.name}?`)) return;
+    try {
+      const res = await fetch(`/api/admin/users/${user.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isSuspended: !user.isSuspended }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast(`Akun ${user.name} berhasil di-${user.isSuspended ? 'aktifkan' : 'tangguhkan'}`, 'success');
+        fetchUsers();
+      } else {
+        showToast(data.error || 'Gagal mengubah status akun', 'error');
+      }
+    } catch {
+      showToast('Terjadi kesalahan jaringan', 'error');
+    }
+  };
+
+  const openEditModal = (u: any) => {
+    setEditForm({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      renterCategory: u.renterCategory || 'MAHASISWA',
+      phone: u.phone || '',
+      identityNo: u.identityNo || '',
+      departmentId: u.department?.id || '',
+    });
+    setEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    setEditing(true);
+    try {
+      const res = await fetch(`/api/admin/users/${editForm.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Data pengguna berhasil diperbarui', 'success');
+        setEditModalOpen(false);
+        fetchUsers();
+      } else {
+        showToast(data.error || 'Gagal memperbarui pengguna', 'error');
+      }
+    } catch {
+      showToast('Terjadi kesalahan jaringan', 'error');
+    } finally {
+      setEditing(false);
+    }
+  };
+
+  const handleCreateUser = async () => {
+    if (!newForm.name || !newForm.email || !newForm.password) {
+      showToast('Nama, Email, dan Password wajib diisi', 'error');
+      return;
+    }
+    setAdding(true);
+    try {
+      const res = await fetch('/api/admin/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newForm),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        showToast('Pengguna baru berhasil ditambahkan', 'success');
+        setAddModalOpen(false);
+        setNewForm({
+          name: '',
+          email: '',
+          password: 'User@123',
+          role: 'BORROWER',
+          renterCategory: 'MAHASISWA',
+          phone: '',
+          identityNo: '',
+          departmentId: '',
+        });
+        fetchUsers();
+      } else {
+        showToast(data.error || 'Gagal membuat pengguna', 'error');
+      }
+    } catch {
+      showToast('Terjadi kesalahan jaringan', 'error');
+    } finally {
+      setAdding(false);
+    }
+  };
 
   const fetchConfigs = useCallback(async () => {
     setConfigsLoading(true);
@@ -102,7 +262,7 @@ export default function AdminUsersPage() {
   const fetchDepts = useCallback(async () => {
     setDeptsLoading(true);
     try {
-      const res = await fetch('/api/partners'); // Fallback ke API partner/dept yang sudah ada
+      const res = await fetch('/api/departments');
       setDepartments(await res.json());
     } catch { }
     finally { setDeptsLoading(false); }
@@ -111,7 +271,7 @@ export default function AdminUsersPage() {
   const fetchAuditLogs = useCallback(async () => {
     setAuditLoading(true);
     try {
-      const res = await fetch('/api/audit-logs'); // Fallback ke endpoint log audit lama jika ada
+      const res = await fetch('/api/audit-logs');
       setAuditLogs(await res.json());
     } catch { }
     finally { setAuditLoading(false); }
@@ -154,6 +314,10 @@ export default function AdminUsersPage() {
     } catch { showToast('Gagal menyimpan konfigurasi', 'error'); }
   };
 
+  if (userRole && !['SUPER_ADMIN', 'ADMIN'].includes(userRole)) {
+    return null;
+  }
+
   return (
     <div style={{ padding: '1.5rem', maxWidth: '1400px', margin: '0 auto' }}>
       {/* Header */}
@@ -190,43 +354,187 @@ export default function AdminUsersPage() {
       {/* TAB: USERS */}
       {activeTab === 'users' && (
         <Card style={{ padding: '1.25rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-            <h3 style={{ fontWeight: 800 }}>Daftar Pengguna Sistem</h3>
-            <button className="btn btn-primary btn-sm" style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-              <Plus size={14} /> Tambah User Baru
+          {/* Header Controls & Filter Bar */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', flex: 1, minWidth: '280px' }}>
+              <div style={{ position: 'relative', width: '100%', maxWidth: '380px' }}>
+                <Search size={16} style={{ position: 'absolute', left: '0.75rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--color-muted)' }} />
+                <input
+                  type="text"
+                  className="input-field"
+                  placeholder="Cari nama, email, NIM/NIP, HP..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  style={{ width: '100%', paddingLeft: '2.2rem' }}
+                />
+              </div>
+
+              <select
+                className="input-field"
+                value={roleFilter}
+                onChange={(e) => setRoleFilter(e.target.value)}
+                style={{ fontSize: '0.85rem', fontWeight: 600 }}
+              >
+                <option value="ALL">Semua Role</option>
+                <option value="SUPER_ADMIN">Super Admin</option>
+                <option value="ADMIN">Admin Sarpras</option>
+                <option value="APPROVER">Kepala Unit (Approver)</option>
+                <option value="STAFF">Staff Loket</option>
+                <option value="BORROWER">Peminjam (Borrower)</option>
+              </select>
+
+              <select
+                className="input-field"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                style={{ fontSize: '0.85rem', fontWeight: 600 }}
+              >
+                <option value="ALL">Semua Status</option>
+                <option value="active">🟢 Aktif</option>
+                <option value="suspended">🔴 Ditangguhkan (Suspended)</option>
+              </select>
+            </div>
+
+            <button
+              className="btn btn-primary btn-sm"
+              style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', padding: '0.55rem 1rem', fontWeight: 700 }}
+              onClick={() => setAddModalOpen(true)}
+            >
+              <Plus size={16} /> Tambah User Baru
             </button>
           </div>
+
+          {/* Table */}
           <div style={{ overflowX: 'auto' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.88rem' }}>
               <thead>
                 <tr style={{ background: 'var(--color-surface2)', borderBottom: '1px solid var(--color-border)' }}>
-                  <th style={{ padding: '0.75rem', textAlign: 'left' }}>Nama</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left' }}>Email / Username</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'left' }}>Departemen</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left' }}>Nama &amp; Identitas</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left' }}>Email &amp; Kontak</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'left' }}>Departemen / Unit</th>
                   <th style={{ padding: '0.75rem', textAlign: 'center' }}>Role</th>
-                  <th style={{ padding: '0.75rem', textAlign: 'center' }}>Status</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'center' }}>Kategori Pemohon</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'center' }}>Status Akun</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'center' }}>Aksi Bantuan Admin</th>
                 </tr>
               </thead>
               <tbody>
                 {usersLoading ? (
-                  <tr><td colSpan={5} style={{ textAlign: 'center', padding: '2rem' }}>Memuat...</td></tr>
-                ) : users.map(u => (
-                  <tr key={u.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                    <td style={{ padding: '0.75rem', fontWeight: 700 }}>{u.name}</td>
-                    <td style={{ padding: '0.75rem' }}>{u.email}</td>
-                    <td style={{ padding: '0.75rem' }}>{u.department || 'Pusat'}</td>
-                    <td style={{ padding: '0.75rem', textAlign: 'center' }}>
-                      <span style={{ padding: '0.15rem 0.5rem', borderRadius: 'var(--radius-sm)', fontSize: '0.75rem', fontWeight: 700, background: 'var(--color-primary-alpha)', color: 'var(--color-primary)' }}>
-                        {u.renterCategory}
-                      </span>
-                    </td>
-                    <td style={{ padding: '0.75rem', textAlign: 'center' }}>
-                      {u.isSuspended ? (
-                        <span style={{ color: '#ef4444' }}>Suspended</span>
-                      ) : <span style={{ color: '#10b981' }}>Active</span>}
-                    </td>
-                  </tr>
-                ))}
+                  <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--color-muted)' }}>Memuat data pengguna...</td></tr>
+                ) : users.length === 0 ? (
+                  <tr><td colSpan={7} style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--color-muted)' }}>Tidak ditemukan data pengguna yang cocok.</td></tr>
+                ) : users.map(u => {
+                  const roleColors: Record<string, { bg: string; text: string }> = {
+                    SUPER_ADMIN: { bg: 'rgba(239,68,68,0.12)', text: '#ef4444' },
+                    ADMIN: { bg: 'rgba(99,102,241,0.12)', text: '#6366f1' },
+                    APPROVER: { bg: 'rgba(245,158,11,0.12)', text: '#f59e0b' },
+                    STAFF: { bg: 'rgba(6,182,212,0.12)', text: '#06b6d4' },
+                    BORROWER: { bg: 'rgba(107,114,128,0.12)', text: '#6b7280' },
+                  };
+                  const rCol = roleColors[u.role] || roleColors.BORROWER;
+
+                  return (
+                    <tr key={u.id} style={{ borderBottom: '1px solid var(--color-border)', transition: 'background 0.2s' }}>
+                      <td style={{ padding: '0.75rem' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--color-text)' }}>{u.name}</div>
+                        {u.identityNo && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', fontFamily: 'monospace' }}>
+                            NIP/NIM: {u.identityNo}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>
+                        <div>{u.email}</div>
+                        {u.phone && (
+                          <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+                            WA: {u.phone}
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>
+                        <span style={{ fontSize: '0.82rem', color: u.department?.name ? 'var(--color-text)' : 'var(--color-muted)' }}>
+                          {u.department?.name || 'Pusat Kampus'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                        <span style={{ padding: '0.2rem 0.55rem', borderRadius: 'var(--radius-sm)', fontSize: '0.72rem', fontWeight: 800, background: rCol.bg, color: rCol.text }}>
+                          {u.role}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                        <span style={{
+                          padding: '0.2rem 0.55rem',
+                          borderRadius: 'var(--radius-sm)',
+                          fontSize: '0.72rem',
+                          fontWeight: 700,
+                          background: u.renterCategory === 'MAHASISWA' ? 'rgba(16,185,129,0.12)' : 'rgba(79,70,229,0.12)',
+                          color: u.renterCategory === 'MAHASISWA' ? '#10b981' : '#6366f1'
+                        }}>
+                          {u.renterCategory === 'MAHASISWA' ? '🎓 Mahasiswa' : (u.renterCategory === 'INTERNAL' ? '🏛️ Internal' : '💼 Eksternal')}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                        {u.isSuspended ? (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: '#ef4444', fontWeight: 700, fontSize: '0.75rem', background: 'rgba(239,68,68,0.1)', padding: '0.2rem 0.5rem', borderRadius: 'var(--radius-sm)' }}>
+                            <Lock size={12} /> Suspended
+                          </span>
+                        ) : (
+                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', color: '#10b981', fontWeight: 700, fontSize: '0.75rem', background: 'rgba(16,185,129,0.1)', padding: '0.2rem 0.5rem', borderRadius: 'var(--radius-sm)' }}>
+                            <Check size={12} /> Aktif
+                          </span>
+                        )}
+                      </td>
+                      <td style={{ padding: '0.75rem', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', alignItems: 'center' }}>
+                          {/* Tombol Reset Password */}
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            title="Reset Password Akun Pengguna"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', padding: '0.3rem 0.55rem' }}
+                            onClick={() => {
+                              setTargetUser(u);
+                              setCustomPassword('User@123');
+                              setResetModalOpen(true);
+                            }}
+                          >
+                            <KeyRound size={13} style={{ color: 'var(--color-primary)' }} />
+                            <span>Reset PW</span>
+                          </button>
+
+                          {/* Tombol Suspend / Unsuspend */}
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            title={u.isSuspended ? 'Buka Blokir (Unsuspend)' : 'Tangguhkan Akun (Suspend)'}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.25rem',
+                              fontSize: '0.75rem',
+                              padding: '0.3rem 0.55rem',
+                              color: u.isSuspended ? '#10b981' : '#ef4444',
+                              borderColor: u.isSuspended ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.3)'
+                            }}
+                            onClick={() => handleToggleSuspend(u)}
+                          >
+                            {u.isSuspended ? <Unlock size={13} /> : <Lock size={13} />}
+                            <span>{u.isSuspended ? 'Buka Kunci' : 'Suspend'}</span>
+                          </button>
+
+                          {/* Tombol Edit User */}
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            title="Ubah Peran, Kategori & Departemen"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', padding: '0.3rem 0.55rem' }}
+                            onClick={() => openEditModal(u)}
+                          >
+                            <Edit size={13} />
+                            <span>Edit</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -395,6 +703,266 @@ export default function AdminUsersPage() {
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end' }}>
             <button className="btn btn-secondary" onClick={() => setShowConfigModal(false)}>Batal</button>
             <button className="btn btn-primary" onClick={handleCreateConfig}>Simpan Konfigurasi</button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* MODAL 1: Reset Password Pengguna */}
+      <Modal isOpen={resetModalOpen} onClose={() => setResetModalOpen(false)} title="🔑 Reset Password Pengguna">
+        {targetUser && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ background: 'var(--color-surface2)', padding: '0.9rem', borderRadius: 'var(--radius-md)', fontSize: '0.85rem' }}>
+              <div><span style={{ color: 'var(--color-muted)' }}>Nama:</span> <strong>{targetUser.name}</strong></div>
+              <div><span style={{ color: 'var(--color-muted)' }}>Email Akun:</span> <strong>{targetUser.email}</strong></div>
+            </div>
+
+            <div>
+              <label className="input-label" style={{ fontWeight: 700 }}>
+                Password Baru *
+              </label>
+              <input
+                type="text"
+                className="input-field"
+                style={{ width: '100%', fontFamily: 'monospace', fontWeight: 700, fontSize: '1rem' }}
+                value={customPassword}
+                onChange={(e) => setCustomPassword(e.target.value)}
+                placeholder="Masukkan password baru (minimal 6 karakter)"
+                required
+              />
+              <div style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginTop: '0.35rem' }}>
+                💡 Default: <code>User@123</code>. Berikan password ini ke pemohon setelah reset berhasil.
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+              <button className="btn btn-secondary" onClick={() => setResetModalOpen(false)}>
+                Batal
+              </button>
+              <button className="btn btn-primary" onClick={handleResetPassword} disabled={resetting}>
+                {resetting ? 'Memproses Reset...' : '✓ Konfirmasi Reset Password'}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      {/* MODAL 2: Edit Data & Peran Pengguna */}
+      <Modal isOpen={editModalOpen} onClose={() => setEditModalOpen(false)} title="✏️ Edit Profil &amp; Hak Akses Pengguna">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div>
+            <label className="input-label">Nama Lengkap *</label>
+            <input
+              type="text"
+              className="input-field"
+              style={{ width: '100%' }}
+              value={editForm.name}
+              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+              required
+            />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div>
+              <label className="input-label">No. WhatsApp / HP</label>
+              <input
+                type="text"
+                className="input-field"
+                style={{ width: '100%' }}
+                value={editForm.phone}
+                onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                placeholder="08xxxxxxxxxx"
+              />
+            </div>
+            <div>
+              <label className="input-label">NIP / NIM / No. Identitas</label>
+              <input
+                type="text"
+                className="input-field"
+                style={{ width: '100%' }}
+                value={editForm.identityNo}
+                onChange={(e) => setEditForm({ ...editForm, identityNo: e.target.value })}
+                placeholder="NIM / NIP"
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div>
+              <label className="input-label">Role Akses Sistem *</label>
+              <select
+                className="input-field"
+                style={{ width: '100%', fontWeight: 700 }}
+                value={editForm.role}
+                onChange={(e) => setEditForm({ ...editForm, role: e.target.value })}
+              >
+                <option value="BORROWER">BORROWER (Peminjam Umum)</option>
+                <option value="STAFF">STAFF (Petugas Loket/Sarpras)</option>
+                <option value="APPROVER">APPROVER (Kepala Unit/Lab)</option>
+                <option value="ADMIN">ADMIN (Pengelola Aset)</option>
+                <option value="SUPER_ADMIN">SUPER_ADMIN (Akses Penuh)</option>
+              </select>
+            </div>
+            <div>
+              <label className="input-label">Kategori Pemohon *</label>
+              <select
+                className="input-field"
+                style={{ width: '100%', fontWeight: 700 }}
+                value={editForm.renterCategory}
+                onChange={(e) => setEditForm({ ...editForm, renterCategory: e.target.value })}
+              >
+                <option value="MAHASISWA">🎓 Mahasiswa Kampus</option>
+                <option value="INTERNAL">🏛️ Dosen / Pegawai Internal</option>
+                <option value="EXTERNAL">💼 Eksternal / Mitra Umum</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="input-label">Unit / Departemen</label>
+            <select
+              className="input-field"
+              style={{ width: '100%' }}
+              value={editForm.departmentId}
+              onChange={(e) => setEditForm({ ...editForm, departmentId: e.target.value })}
+            >
+              <option value="">Pusat Kampus / Tanpa Unit</option>
+              {departments.map(d => (
+                <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+            <button className="btn btn-secondary" onClick={() => setEditModalOpen(false)}>
+              Batal
+            </button>
+            <button className="btn btn-primary" onClick={handleSaveEdit} disabled={editing}>
+              {editing ? 'Menyimpan...' : 'Simpan Perubahan'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* MODAL 3: Tambah Pengguna Baru */}
+      <Modal isOpen={addModalOpen} onClose={() => setAddModalOpen(false)} title="👤 Daftarkan Pengguna Baru">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+          <div>
+            <label className="input-label">Nama Lengkap *</label>
+            <input
+              type="text"
+              className="input-field"
+              style={{ width: '100%' }}
+              placeholder="Contoh: Ahmad Dahlan"
+              value={newForm.name}
+              onChange={(e) => setNewForm({ ...newForm, name: e.target.value })}
+              required
+            />
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div>
+              <label className="input-label">Email Akun (Login) *</label>
+              <input
+                type="email"
+                className="input-field"
+                style={{ width: '100%' }}
+                placeholder="nama@spasi.app"
+                value={newForm.email}
+                onChange={(e) => setNewForm({ ...newForm, email: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <label className="input-label">Password Awal *</label>
+              <input
+                type="text"
+                className="input-field"
+                style={{ width: '100%', fontFamily: 'monospace' }}
+                value={newForm.password}
+                onChange={(e) => setNewForm({ ...newForm, password: e.target.value })}
+                required
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div>
+              <label className="input-label">No. WhatsApp / HP</label>
+              <input
+                type="text"
+                className="input-field"
+                style={{ width: '100%' }}
+                placeholder="08xxxxxxxxxx"
+                value={newForm.phone}
+                onChange={(e) => setNewForm({ ...newForm, phone: e.target.value })}
+              />
+            </div>
+            <div>
+              <label className="input-label">NIP / NIM / No. KTP</label>
+              <input
+                type="text"
+                className="input-field"
+                style={{ width: '100%' }}
+                placeholder="3201xxxx / NIM"
+                value={newForm.identityNo}
+                onChange={(e) => setNewForm({ ...newForm, identityNo: e.target.value })}
+              />
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div>
+              <label className="input-label">Role Akses *</label>
+              <select
+                className="input-field"
+                style={{ width: '100%', fontWeight: 700 }}
+                value={newForm.role}
+                onChange={(e) => setNewForm({ ...newForm, role: e.target.value })}
+              >
+                <option value="BORROWER">BORROWER (Peminjam)</option>
+                <option value="STAFF">STAFF (Petugas)</option>
+                <option value="APPROVER">APPROVER (Kepala Unit)</option>
+                <option value="ADMIN">ADMIN (Pengelola Aset)</option>
+                <option value="SUPER_ADMIN">SUPER_ADMIN</option>
+              </select>
+            </div>
+            <div>
+              <label className="input-label">Kategori Pemohon *</label>
+              <select
+                className="input-field"
+                style={{ width: '100%', fontWeight: 700 }}
+                value={newForm.renterCategory}
+                onChange={(e) => setNewForm({ ...newForm, renterCategory: e.target.value })}
+              >
+                <option value="MAHASISWA">🎓 Mahasiswa Kampus</option>
+                <option value="INTERNAL">🏛️ Dosen / Pegawai Internal</option>
+                <option value="EXTERNAL">💼 Eksternal / Mitra Umum</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="input-label">Unit / Departemen</label>
+            <select
+              className="input-field"
+              style={{ width: '100%' }}
+              value={newForm.departmentId}
+              onChange={(e) => setNewForm({ ...newForm, departmentId: e.target.value })}
+            >
+              <option value="">Pusat Kampus / Tanpa Unit</option>
+              {departments.map(d => (
+                <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+              ))}
+            </select>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+            <button className="btn btn-secondary" onClick={() => setAddModalOpen(false)}>
+              Batal
+            </button>
+            <button className="btn btn-primary" onClick={handleCreateUser} disabled={adding}>
+              {adding ? 'Mendaftarkan...' : '+ Daftarkan Pengguna'}
+            </button>
           </div>
         </div>
       </Modal>

@@ -10,8 +10,6 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { Plus, Search, Pencil, Trash2, Tag, ArrowLeft } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
-
 export default function CategoriesManagementPage() {
   const { showToast } = useToast();
   const [categories, setCategories] = useState<any[]>([]);

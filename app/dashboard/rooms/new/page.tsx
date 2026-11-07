@@ -79,6 +79,9 @@ export default function NewRoomPage() {
   const [building, setBuilding] = useState('');
   const [floor, setFloor] = useState('');
   const [areaName, setAreaName] = useState('');
+  const [departmentId, setDepartmentId] = useState('');
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [existingBuildings, setExistingBuildings] = useState<string[]>([]);
 
   // Section B - Spesifikasi
   const [area, setArea] = useState('');
@@ -106,12 +109,18 @@ export default function NewRoomPage() {
   const [status, setStatus] = useState('AVAILABLE');
 
   React.useEffect(() => {
-    fetch('/api/assets?locationId=none')
-      .then((res) => res.json())
-      .then((data) => {
-        if (Array.isArray(data)) setAvailableAssets(data);
-      })
-      .catch((err) => console.error(err));
+    Promise.all([
+      fetch('/api/assets?locationId=none').then((r) => r.json()).catch(() => []),
+      fetch('/api/rooms').then((r) => r.json()).catch(() => []),
+      fetch('/api/departments').then((r) => r.json()).catch(() => []),
+    ]).then(([assetsData, roomsData, deptsData]) => {
+      if (Array.isArray(assetsData)) setAvailableAssets(assetsData);
+      if (Array.isArray(roomsData)) {
+        const buildings = Array.from(new Set(roomsData.map((r: any) => r.building).filter(Boolean))) as string[];
+        setExistingBuildings(buildings);
+      }
+      if (Array.isArray(deptsData)) setDepartments(deptsData);
+    });
   }, []);
 
   const toggleFacility = (fac: string) => {
@@ -158,6 +167,7 @@ export default function NewRoomPage() {
         building: building.trim(),
         floor: floor.trim() || null,
         areaName: areaName.trim() || null,
+        departmentId: departmentId || null,
         area: area ? parseFloat(area) : null,
         capacity: capacity ? parseInt(capacity) : null,
         description: description.trim() || null,
@@ -244,20 +254,34 @@ export default function NewRoomPage() {
               style={{ marginBottom: 0 }}
             />
           </div>
+
           <div
             style={{
               display: 'grid',
               gridTemplateColumns: '2fr 1fr 2fr',
               gap: '1rem',
+              marginBottom: '1rem',
             }}
           >
-            <Input
-              label="Gedung *"
-              placeholder="Gedung A"
-              value={building}
-              onChange={(e) => setBuilding(e.target.value)}
-              style={{ marginBottom: 0 }}
-            />
+            <div>
+              <FormLabel required>Gedung</FormLabel>
+              <input
+                type="text"
+                list="building-suggestions"
+                className="input-field"
+                placeholder="Pilih atau ketik Gedung..."
+                value={building}
+                onChange={(e) => setBuilding(e.target.value)}
+                style={{ width: '100%' }}
+                required
+              />
+              <datalist id="building-suggestions">
+                {existingBuildings.map((b, idx) => (
+                  <option key={idx} value={b} />
+                ))}
+              </datalist>
+            </div>
+
             <Input
               label="Lantai"
               placeholder="1"
@@ -272,6 +296,26 @@ export default function NewRoomPage() {
               onChange={(e) => setAreaName(e.target.value)}
               style={{ marginBottom: 0 }}
             />
+          </div>
+
+          <div style={{ marginBottom: '0.5rem' }}>
+            <FormLabel>Fakultas / Unit Pengelola Ruangan</FormLabel>
+            <select
+              className="input-field"
+              value={departmentId}
+              onChange={(e) => setDepartmentId(e.target.value)}
+              style={{ width: '100%' }}
+            >
+              <option value="">-- Dikelola Umum / Pusat --</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} ({d.code})
+                </option>
+              ))}
+            </select>
+            <p style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginTop: '0.25rem' }}>
+              Pilih unit atau fakultas yang memiliki hak otorisasi dan pengelolaan atas ruangan ini.
+            </p>
           </div>
         </Card>
 

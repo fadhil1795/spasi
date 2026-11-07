@@ -77,7 +77,8 @@ export async function POST(request: Request) {
       supportingDocUrl, rentalType, paymentScheme,
       renterCategory = 'MAHASISWA',
       addonAssets, // array of { assetId, quantity, ratePerSession }
-      activityType, consentText
+      activityType, consentText,
+      bankName, bankAccountNumber, bankAccountHolder,
     } = body;
 
     if (!locationId || !startTime || !endTime || !renterName || !renterPhone) {
@@ -181,18 +182,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Durasi maksimal pemesanan ruangan adalah 12 jam per hari.' }, { status: 400 });
     }
 
-    // Anti-double booking check
-    const conflict = await prisma.roomBooking.findFirst({
-      where: {
-        locationId,
-        bookingStatus: { in: ['CONFIRMED', 'ACTIVE'] },
-        OR: [{ startTime: { lte: end }, endTime: { gte: start } }],
-      },
-    });
-    if (conflict) {
-      return NextResponse.json({ error: 'Slot waktu sudah dipesan oleh penyewa lain' }, { status: 409 });
-    }
-
     // Get room rate
     const room = await prisma.location.findUnique({ where: { id: locationId } });
     if (!room) return NextResponse.json({ error: 'Ruangan tidak ditemukan' }, { status: 404 });
@@ -258,87 +247,120 @@ export async function POST(request: Request) {
       addonSubtotal = addonList.reduce((sum: number, a: any) => {
         return sum + (parseFloat(a.ratePerSession) * parseInt(a.quantity));
       }, 0);
-      depositAmount = 0; // No deposit for external rental
+      depositAmount = inputDepositAmount ? parseFloat(inputDepositAmount) : (room.depositAmount || 0);
       finalPayStatus = inputPayStatus || 'UNPAID';
     }
 
     const totalAmount = roomSubtotal + addonSubtotal;
-
-    // Find or create renter
-    let renter = await prisma.renter.findFirst({ where: { phone: renterPhone } });
-    if (!renter) {
-      renter = await prisma.renter.create({
-        data: {
-          name: renterName,
-          phone: renterPhone,
-          email: renterEmail || null,
-          idCardNo: renterIdCard || null,
-        },
-      });
-    }
-
-    // Generate booking number
-    const count = await prisma.roomBooking.count();
-    const bookingNumber = generateBookingNumber(count + 1);
-
     const clientIp = request.headers.get('x-forwarded-for') || '127.0.0.1';
 
-    // Create booking with addons
-    const booking = await prisma.roomBooking.create({
-      data: {
-        bookingNumber,
-        locationId,
-        renterId: renter.id,
-        startTime: start,
-        endTime: end,
-        durationHours,
-        roomRate,
-        roomSubtotal,
-        addonSubtotal,
-        totalAmount,
-        depositAmount,
-        renterCategory,
-        bookingStatus: 'PENDING',
-        payStatus: finalPayStatus,
-        payMethod: payMethod || null,
-        paymentScheme: paymentScheme || 'FULL',
-        paymentExpiredAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Deadline +24 jam
-        rentalType: rentalType || 'HOURLY',
-        supportingDocUrl: supportingDocUrl || null,
-        notes: notes || null,
-        activityType: activityType || 'PERSONAL',
-        addonAssets: {
-          create: (Array.isArray(addonAssets) && renterCategory === 'EXTERNAL_SEWA')
-            ? addonAssets.map((a: any) => ({
-                assetId: a.assetId,
-                assetName: a.assetName || '',
-                quantity: parseInt(a.quantity),
-                ratePerSession: parseFloat(a.ratePerSession),
-                subtotal: parseFloat(a.ratePerSession) * parseInt(a.quantity),
-              }))
-            : [],
-        },
-        // Simpan Log Syarat elektronik
-        consentLogs: {
-          create: [
+    // Concurrency-safe atomic transaction
+    const booking = await prisma.$transaction(async (tx) => {
+      // Anti-double booking check (CONFIRMED, ACTIVE, or PENDING with active payment window)
+      const conflict = await tx.roomBooking.findFirst({
+        where: {
+          locationId,
+          OR: [
+            { bookingStatus: { in: ['CONFIRMED', 'ACTIVE'] } },
             {
-              userId,
-              consentType: renterCategory === 'EXTERNAL_SEWA' ? 'RENTAL' : 'GENERAL',
-              consentTextVersion: consentText || 'Persetujuan syarat & ketentuan penggunaan fasilitas SPASI',
-              ipAddress: clientIp
-            }
-          ]
-        }
-      },
-      include: {
-        location: true,
-        renter: true,
-        addonAssets: true,
-      },
+              bookingStatus: 'PENDING',
+              paymentExpiredAt: { gt: new Date() },
+            },
+          ],
+          AND: [
+            { startTime: { lt: end } },
+            { endTime: { gt: start } },
+          ],
+        },
+      });
+
+      if (conflict) {
+        throw new Error('CONFLICT_DOUBLE_BOOKING');
+      }
+
+      // Find or create renter
+      let renter = await tx.renter.findFirst({ where: { phone: renterPhone } });
+      if (!renter) {
+        renter = await tx.renter.create({
+          data: {
+            name: renterName,
+            phone: renterPhone,
+            email: renterEmail || null,
+            idCardNo: renterIdCard || null,
+          },
+        });
+      }
+
+      // Generate booking number
+      const count = await tx.roomBooking.count();
+      const bookingNumber = generateBookingNumber(count + 1);
+
+      // Create booking with addons and consent logs
+      return await tx.roomBooking.create({
+        data: {
+          bookingNumber,
+          locationId,
+          renterId: renter.id,
+          startTime: start,
+          endTime: end,
+          durationHours,
+          roomRate,
+          roomSubtotal,
+          addonSubtotal,
+          totalAmount,
+          depositAmount,
+          renterCategory,
+          bookingStatus: 'PENDING',
+          payStatus: finalPayStatus,
+          payMethod: payMethod || null,
+          paymentScheme: paymentScheme || 'FULL',
+          paymentExpiredAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Deadline +24 jam
+          rentalType: rentalType || 'HOURLY',
+          supportingDocUrl: supportingDocUrl || null,
+          notes: notes || null,
+          activityType: activityType || 'PERSONAL',
+          bankName: bankName || null,
+          bankAccountNumber: bankAccountNumber || null,
+          bankAccountHolder: bankAccountHolder || null,
+          refundStatus: depositAmount > 0 ? 'PENDING' : 'NONE',
+          addonAssets: {
+            create: (Array.isArray(addonAssets) && renterCategory === 'EXTERNAL_SEWA')
+              ? addonAssets.map((a: any) => ({
+                  assetId: a.assetId,
+                  assetName: a.assetName || '',
+                  quantity: parseInt(a.quantity),
+                  ratePerSession: parseFloat(a.ratePerSession),
+                  subtotal: parseFloat(a.ratePerSession) * parseInt(a.quantity),
+                }))
+              : [],
+          },
+          consentLogs: {
+            create: [
+              {
+                userId,
+                consentType: renterCategory === 'EXTERNAL_SEWA' ? 'RENTAL' : 'GENERAL',
+                consentTextVersion: consentText || 'Persetujuan syarat & ketentuan penggunaan fasilitas SPASI',
+                ipAddress: clientIp,
+              },
+            ],
+          },
+        } as any,
+        include: {
+          location: true,
+          renter: true,
+          addonAssets: true,
+        },
+      });
     });
 
     return NextResponse.json(booking, { status: 201 });
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.message === 'CONFLICT_DOUBLE_BOOKING') {
+      return NextResponse.json(
+        { error: 'Slot waktu ruangan tersebut sudah dipesan atau sedang dalam proses pembayaran oleh pemohon lain' },
+        { status: 409 }
+      );
+    }
     console.error('Error creating room booking:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

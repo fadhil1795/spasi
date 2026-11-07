@@ -363,25 +363,11 @@ export default function DashboardCatalogPage() {
                                   lineHeight: 1.4,
                                   fontWeight: 600,
                                 }}>
-                                  🔒 Tidak disewakan untuk Eksternal.
+                                  🔒 Khusus Kegiatan Internal. Ajukan verifikasi KTM/NIP di menu Verifikasi Akun.
                                 </div>
                               );
                             }
-                            // Rentable, but user is external (unverified)
-                            return (
-                              <div style={{
-                                background: 'rgba(239,68,68,0.04)',
-                                  border: '1px dashed rgba(239,68,68,0.2)',
-                                padding: '0.65rem 0.85rem',
-                                borderRadius: 'var(--radius-md)',
-                                textAlign: 'center',
-                                fontSize: '0.73rem',
-                                color: 'var(--color-muted)',
-                                lineHeight: 1.4,
-                              }}>
-                                🔒 Akses terbatas bagi Eksternal. Silakan ajukan verifikasi.
-                              </div>
-                            );
+                            // Rentable rooms can be booked by external!
                           } else {
                             // Internal
                             if (!room.isLoanable && !room.isRentable) {
@@ -480,63 +466,88 @@ export default function DashboardCatalogPage() {
 
                   <div style={{ padding: '1.25rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <div>
-                      <h3 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '0.35rem' }}>{ast.name}</h3>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+                        <h3 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '0.35rem' }}>{ast.name}</h3>
+                      </div>
                       <div style={{ fontSize: '0.82rem', color: 'var(--color-muted)', marginBottom: '0.75rem' }}>
                         Kategori: {ast.category?.name || 'Aset Moving'} • Merek: {ast.brand || '-'}
                       </div>
 
-                      <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)', lineHeight: 1.4, marginBottom: '1rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                      <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)', lineHeight: 1.4, marginBottom: '0.75rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
                         {ast.description || 'Peralatan operasional berkualitas tinggi siap guna.'}
                       </p>
+
+                      <Link
+                        href={`/dashboard/assets/${ast.id}`}
+                        style={{ fontSize: '0.8rem', color: 'var(--color-primary-light)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem', marginBottom: '0.75rem' }}
+                      >
+                        Lihat Spesifikasi &amp; Detail <ArrowRight size={13} />
+                      </Link>
                     </div>
 
                     <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: '1rem' }}>
                       <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginBottom: '0.2rem' }}>Tarif Pinjam / Sewa</div>
                       <div style={{ fontSize: '1.15rem', fontWeight: 900, color: 'var(--color-primary-light)', marginBottom: '0.85rem' }}>
-                        {rate > 0 ? `${formatCurrency(rate)}/sesi` : 'Gratis Pinjam (Internal)'}
+                        {rate > 0 ? `${formatCurrency(rate)}/hari` : 'Gratis Pinjam (Internal)'}
                       </div>
 
-                      {session?.user && (session.user as any).role === 'BORROWER' && ((session.user as any).renterCategory || 'EXTERNAL') === 'EXTERNAL' ? (
-                        <div style={{
-                          background: 'rgba(239,68,68,0.04)',
-                          border: '1px dashed rgba(239,68,68,0.2)',
-                          padding: '0.65rem 0.85rem',
-                          borderRadius: 'var(--radius-md)',
-                          textAlign: 'center',
-                          fontSize: '0.73rem',
-                          color: 'var(--color-muted)',
-                          lineHeight: 1.4,
-                        }}>
-                          🔒 Akses terbatas bagi Eksternal. Silakan ajukan verifikasi.
-                        </div>
-                      ) : (
-                        <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => handleAddAssetToCart(ast)}
-                            style={{ flex: 1, minWidth: '90px' }}
-                          >
-                            <ShoppingBag size={13} /> Keranjang
-                          </Button>
+                      {(() => {
+                        const isBorrower = session?.user && (session.user as any).role === 'BORROWER';
+                        const renterCategory = isBorrower ? ((session.user as any).renterCategory || 'EXTERNAL') : 'EXTERNAL';
 
-                          <Link
-                            href={`/dashboard/rentals/new?assetId=${ast.id}`}
-                            className="btn btn-primary btn-sm"
-                            style={{ flex: 1, minWidth: '100px' }}
-                          >
-                            <CreditCard size={13} /> Sewa / Booking
-                          </Link>
+                        if (isBorrower && renterCategory === 'EXTERNAL' && !ast.isRentable) {
+                          return (
+                            <div style={{
+                              background: 'rgba(239,68,68,0.04)',
+                              border: '1px dashed rgba(239,68,68,0.2)',
+                              padding: '0.65rem 0.85rem',
+                              borderRadius: 'var(--radius-md)',
+                              textAlign: 'center',
+                              fontSize: '0.73rem',
+                              color: 'var(--color-danger)',
+                              lineHeight: 1.4,
+                              fontWeight: 600,
+                            }}>
+                              🔒 Khusus Pinjam Internal. Ajukan verifikasi KTM/NIP di menu Verifikasi Akun.
+                            </div>
+                          );
+                        }
 
-                          <Link
-                            href={`/dashboard/loans/new?assetId=${ast.id}`}
-                            className="btn btn-secondary btn-sm"
-                            style={{ flex: 1, minWidth: '80px' }}
-                          >
-                            <CalendarCheck size={13} /> Pinjam
-                          </Link>
-                        </div>
-                      )}
+                        return (
+                          <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap' }}>
+                            {ast.isRentable && (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => handleAddAssetToCart(ast)}
+                                style={{ flex: 1, minWidth: '85px' }}
+                              >
+                                <ShoppingBag size={13} /> Keranjang
+                              </Button>
+                            )}
+
+                            {ast.isRentable ? (
+                              <Link
+                                href={`/dashboard/rentals/new?assetId=${ast.id}`}
+                                className="btn btn-primary btn-sm"
+                                style={{ flex: 1, minWidth: '95px' }}
+                              >
+                                <CreditCard size={13} /> Sewa
+                              </Link>
+                            ) : null}
+
+                            {(!isBorrower || renterCategory !== 'EXTERNAL') && ast.isLoanable && (
+                              <Link
+                                href={`/dashboard/loans/new?assetId=${ast.id}`}
+                                className="btn btn-secondary btn-sm"
+                                style={{ flex: 1, minWidth: '80px' }}
+                              >
+                                <CalendarCheck size={13} /> Pinjam
+                              </Link>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </Card>

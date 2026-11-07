@@ -34,6 +34,35 @@ export async function PATCH(
       return NextResponse.json({ error: 'Pengajuan sudah diproses sebelumnya' }, { status: 400 });
     }
 
+    if (status === 'APPROVED') {
+      // Validasi keunikan NIM/NIP
+      const existingUserWithIdentity = await prisma.user.findFirst({
+        where: {
+          identityNo: verificationReq.identityNo,
+          id: { not: verificationReq.userId },
+        },
+      });
+      if (existingUserWithIdentity) {
+        return NextResponse.json({
+          error: `Gagal menyetujui: NIM/NIP ${verificationReq.identityNo} sudah terdaftar pada pengguna lain (${existingUserWithIdentity.email}).`,
+        }, { status: 400 });
+      }
+    }
+
+    // Cari kesesuaian unit/fakultas jika ada
+    let matchedDepartmentId: string | null = null;
+    if (status === 'APPROVED' && verificationReq.departmentName) {
+      const dept = await prisma.department.findFirst({
+        where: {
+          OR: [
+            { name: { contains: verificationReq.departmentName } },
+            { code: { equals: verificationReq.departmentName } },
+          ],
+        },
+      });
+      if (dept) matchedDepartmentId = dept.id;
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       // 1. Update status VerificationRequest
       const updatedReq = await tx.verificationRequest.update({
@@ -45,12 +74,15 @@ export async function PATCH(
         },
       });
 
-      // 2. Jika disetujui, update renterCategory pada User
+      // 2. Jika disetujui, update renterCategory, identityNo, dan departmentId pada User
       if (status === 'APPROVED') {
         await tx.user.update({
           where: { id: verificationReq.userId },
           data: {
+            name: verificationReq.fullName || undefined,
             renterCategory: verificationReq.requestedCategory,
+            identityNo: verificationReq.identityNo,
+            ...(matchedDepartmentId ? { departmentId: matchedDepartmentId } : {}),
           },
         });
       }

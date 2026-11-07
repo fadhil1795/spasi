@@ -92,8 +92,29 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nama dan kategori aset wajib diisi' }, { status: 400 });
     }
 
-    const count = await prisma.asset.count();
-    const code = generateAssetCode(count + 1);
+    const currentYear = new Date().getFullYear();
+    const latestAsset = await prisma.asset.findFirst({
+      where: { code: { startsWith: `AST-${currentYear}-` } },
+      orderBy: { code: 'desc' },
+    });
+
+    let nextSeq = 1;
+    if (latestAsset) {
+      const parts = latestAsset.code.split('-');
+      const lastSeq = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(lastSeq)) {
+        nextSeq = lastSeq + 1;
+      }
+    }
+
+    let code = generateAssetCode(nextSeq);
+    let exists = await prisma.asset.findUnique({ where: { code } });
+    while (exists) {
+      nextSeq++;
+      code = generateAssetCode(nextSeq);
+      exists = await prisma.asset.findUnique({ where: { code } });
+    }
+
     const qrToken = `qr-token-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     const totalQty = quantity ? Math.max(1, parseInt(quantity)) : 1;
 
@@ -122,6 +143,7 @@ export async function POST(request: Request) {
         isLoanable: isLoanable !== undefined ? Boolean(isLoanable) : true,
         isFixedToRoom: Boolean(isFixedToRoom),
         checklistItems: Array.isArray(checklistItems) ? JSON.stringify(checklistItems) : '[]',
+        customAttributes: typeof body.customAttributes === 'object' ? JSON.stringify(body.customAttributes) : (body.customAttributes || null),
       },
     });
 

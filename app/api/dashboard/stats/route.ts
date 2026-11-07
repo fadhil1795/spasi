@@ -33,19 +33,17 @@ export async function GET() {
           },
         }),
         prisma.loan.count({
-          where: { userId: currentUser.id, status: 'PENDING_APPROVAL_L1' },
+          where: { userId: currentUser.id, status: { in: ['PENDING_L1', 'PENDING_L2'] } },
         }),
         prisma.loan.count({
-          where: { userId: currentUser.id, status: { in: ['APPROVED_L1', 'BORROWED'] } },
+          where: { userId: currentUser.id, status: { in: ['APPROVED', 'ACTIVE'] } },
         }),
         prisma.roomBooking.findMany({
           where: {
-            renter: {
-              OR: [
-                { email: currentUser.email },
-                { phone: currentUser.phone || undefined },
-              ],
-            },
+            OR: [
+              { renterId: currentUser.id },
+              { renter: { email: currentUser.email } },
+            ],
           },
           take: 5,
           orderBy: { createdAt: 'desc' },

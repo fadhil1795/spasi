@@ -20,8 +20,6 @@ import { useSearchParams } from 'next/navigation';
 import { PaymentModal } from '@/components/public/PaymentModal';
 import { FilterPill } from '@/components/ui/FilterPill';
 
-export const dynamic = 'force-dynamic';
-
 type StatusFilter = 'SEMUA' | 'PENDING' | 'APPROVED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
 
 export default function DashboardRentalsPage() {

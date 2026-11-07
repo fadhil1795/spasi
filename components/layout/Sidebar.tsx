@@ -37,6 +37,8 @@ import {
   Handshake,
   Coins,
   MessageSquare,
+  ShoppingBag,
+  Package,
 } from 'lucide-react';
 
 interface SubMenuItem {
@@ -71,7 +73,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
   const currentTab = searchParams.get('tab') || 'profile';
 
   const [openGroups, setOpenGroups] = React.useState<Record<number, boolean>>({
-    0: true, 1: true, 2: true, 3: true
+    0: true, 1: true, 2: true, 3: true, 4: true, 5: true
   });
 
   const [openSubMenus, setOpenSubMenus] = React.useState<Record<string, boolean>>({
@@ -93,52 +95,58 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
       title: 'MENU UTAMA',
       items: [
         { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-        { label: 'Katalog', href: '/dashboard/catalog', icon: Building2 },
+        { label: 'Katalog Fasilitas', href: '/dashboard/catalog', icon: Building2 },
       ]
     },
     {
-      title: 'TRANSAKSI SAYA',
+      title: 'LAYANAN SAYA',
       items: [
         { label: 'Keranjang Saya', href: '/dashboard/cart', icon: Receipt },
-        { label: 'Tagihan & Denda', href: '/dashboard/penalties', icon: AlertCircle },
         { label: 'Peminjaman Saya', href: '/dashboard/loans?mode=my', icon: CalendarCheck },
         { label: 'Sewa & Booking Saya', href: '/dashboard/rentals?mode=my', icon: CalendarRange },
+        { label: 'Tagihan & Denda', href: '/dashboard/penalties', icon: AlertCircle },
+        { label: 'Ganti Rugi & Klaim', href: '/dashboard/claims', icon: ShieldAlert },
         { label: 'Riwayat Transaksi', href: '/dashboard/history', icon: FileSpreadsheet },
-        { label: 'Ganti Rugi & Klaim', href: '/dashboard/claims', icon: AlertCircle },
         { label: 'Verifikasi Akun', href: '/dashboard/verification', icon: UserCheck, roles: ['BORROWER'] },
       ]
     },
     {
-      title: 'MANAJEMEN',
+      title: 'SIRKULASI & OPERASIONAL',
       items: [
-        // 1. Pengelolaan Peminjaman & Sewa
-        { label: 'Scan QR', href: '/dashboard/loans/scan', icon: QrCode, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
+        { label: 'Scan QR Cepat', href: '/dashboard/loans/scan', icon: QrCode, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
         { label: 'Kelola Peminjaman', href: '/dashboard/loans', icon: CalendarCheck, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF', 'APPROVER'] },
-        { label: 'Kelola Sewa & Booking', href: '/dashboard/rentals', icon: CalendarRange, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
+        { label: 'Kelola Sewa & Ruang', href: '/dashboard/rentals', icon: CalendarRange, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
         { label: 'Serah Terima Aset', href: '/dashboard/handovers', icon: ClipboardCheck, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
         { label: 'Manajemen Denda', href: '/dashboard/admin/penalties', icon: AlertCircle, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
-        
-        // 2. Inventaris & Sarpras
-        { label: 'Kelola Aset', href: '/dashboard/assets', icon: Box, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
-        { label: 'Kelola Ruang', href: '/dashboard/rooms', icon: Building2, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
-        { label: 'Maintenance Aset', href: '/dashboard/maintenance', icon: Wrench, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
-        
-        // 3. Pengguna & CRM
-        { label: 'Peminjam & Relasi', href: '/dashboard/crm', icon: Users, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
-        { label: 'Verifikasi Akun', href: '/dashboard/verifications', icon: UserCheck, roles: ['SUPER_ADMIN', 'ADMIN'] },
+      ]
+    },
+    {
+      title: 'SARANA & PRASARANA',
+      items: [
+        { label: 'Data Aset', href: '/dashboard/assets', icon: Box, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
+        { label: 'Data Ruangan', href: '/dashboard/rooms', icon: Building2, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
+        { label: 'Stock Opname QR', href: '/dashboard/stock-opname', icon: QrCode, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
+        { label: 'Pengadaan Aset', href: '/dashboard/procurement', icon: ShoppingBag, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
+        { label: 'Barang Habis Pakai', href: '/dashboard/consumables', icon: Package, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
+        { label: 'Maintenance & Servis', href: '/dashboard/maintenance', icon: Wrench, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
+      ]
+    },
+    {
+      title: 'PENGGUNA & KEUANGAN',
+      items: [
+        { label: 'Peminjam & Relasi (CRM)', href: '/dashboard/crm', icon: Users, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
+        { label: 'Verifikasi Pengguna', href: '/dashboard/verifications', icon: UserCheck, roles: ['SUPER_ADMIN', 'ADMIN'] },
         { label: 'Manajemen User & Akses', href: '/dashboard/admin/users', icon: Shield, roles: ['SUPER_ADMIN'] },
-        
-        // 4. Keuangan & Kemitraan
-        { label: 'Keuangan & Kas', href: '/dashboard/finance', icon: Coins, roles: ['SUPER_ADMIN', 'ADMIN'] },
+        { label: 'Buku Kas & Keuangan', href: '/dashboard/finance', icon: Coins, roles: ['SUPER_ADMIN', 'ADMIN'] },
         { label: 'Mitra & Komisi', href: '/dashboard/admin/partners', icon: Handshake, roles: ['SUPER_ADMIN', 'ADMIN'] },
       ]
     },
     {
-      title: 'SISTEM',
+      title: 'SISTEM & LAPORAN',
       items: [
-        { label: 'Laporan', href: '/dashboard/reports', icon: FileSpreadsheet, roles: ['SUPER_ADMIN', 'ADMIN', 'APPROVER'] },
-        { label: 'Kategori', href: '/dashboard/categories', icon: Tag, roles: ['SUPER_ADMIN', 'ADMIN'] },
-        { label: 'Utilitas', href: '/dashboard/tools', icon: SlidersHorizontal, roles: ['SUPER_ADMIN', 'ADMIN'] },
+        { label: 'Laporan & Rekapitulasi', href: '/dashboard/reports', icon: FileSpreadsheet, roles: ['SUPER_ADMIN', 'ADMIN', 'APPROVER'] },
+        { label: 'Kategori & Klasifikasi', href: '/dashboard/categories', icon: Tag, roles: ['SUPER_ADMIN', 'ADMIN'] },
+        { label: 'Utilitas Sistem', href: '/dashboard/tools', icon: SlidersHorizontal, roles: ['SUPER_ADMIN', 'ADMIN'] },
         {
           label: 'Pengaturan',
           href: '/dashboard/settings',
@@ -409,15 +417,58 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
                 <div style={{ fontWeight: 700, fontSize: '0.85rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {session.user.name}
                 </div>
-                <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', marginBottom: '0.2rem' }}>
                   {session.user.email}
                 </div>
+                {(() => {
+                  const getRoleInfo = (r: string) => {
+                    switch (r) {
+                      case 'SUPER_ADMIN':
+                        return { label: 'Super Admin', color: '#A78BFA', bg: 'rgba(139, 92, 246, 0.15)', border: 'rgba(139, 92, 246, 0.3)' };
+                      case 'ADMIN':
+                        return { label: 'Admin Sarpras', color: '#60A5FA', bg: 'rgba(59, 130, 246, 0.15)', border: 'rgba(59, 130, 246, 0.3)' };
+                      case 'APPROVER':
+                        return { label: 'Pimpinan', color: '#FBBF24', bg: 'rgba(245, 158, 11, 0.15)', border: 'rgba(245, 158, 11, 0.3)' };
+                      case 'STAFF':
+                        return { label: 'Petugas', color: '#34D399', bg: 'rgba(16, 185, 129, 0.15)', border: 'rgba(16, 185, 129, 0.3)' };
+                      case 'BORROWER':
+                      default:
+                        return { label: 'Peminjam', color: '#22D3EE', bg: 'rgba(6, 182, 212, 0.15)', border: 'rgba(6, 182, 212, 0.3)' };
+                    }
+                  };
+                  const roleBadge = getRoleInfo(userRole);
+                  return (
+                    <span
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        fontSize: '0.62rem',
+                        fontWeight: 700,
+                        padding: '0.12rem 0.45rem',
+                        borderRadius: '9999px',
+                        color: roleBadge.color,
+                        background: roleBadge.bg,
+                        border: `1px solid ${roleBadge.border}`,
+                        letterSpacing: '0.04em',
+                      }}
+                    >
+                      {roleBadge.label}
+                    </span>
+                  );
+                })()}
               </div>
             </div>
           )}
 
           <button
-            onClick={() => signOut({ callbackUrl: '/auth/login' })}
+            onClick={async () => {
+              try {
+                await signOut({ redirect: false });
+              } catch (e) {
+                console.error(e);
+              }
+              window.location.href = '/login';
+            }}
             className="sidebar-link"
             style={{
               width: '100%',

@@ -7,8 +7,6 @@ import { Button } from '@/components/ui/Button';
 import { Printer, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
-export const dynamic = 'force-dynamic';
-
 function QRLabelsContent() {
   const searchParams = useSearchParams();
   const ids = searchParams.get('ids')?.split(',') || [];
@@ -30,10 +28,13 @@ function QRLabelsContent() {
         const selected = all.filter((a: any) => ids.includes(a.id));
         setAssets(selected);
 
-        // Generate QR Code images
+        // Generate QR Code images with direct scan URL
         const qrMap: Record<string, string> = {};
         for (const ast of selected) {
-          const qrDataUrl = await QRCode.toDataURL(ast.qrToken || ast.code, {
+          const scanUrl = typeof window !== 'undefined'
+            ? `${window.location.origin}/assets/${ast.id}`
+            : ast.code;
+          const qrDataUrl = await QRCode.toDataURL(scanUrl, {
             width: 150,
             margin: 1,
             color: { dark: '#000000', light: '#FFFFFF' },
@@ -77,7 +78,7 @@ function QRLabelsContent() {
           {assets.map((ast) => (
             <div key={ast.id} className="qr-label-card">
               <div className="qr-label-header">
-                <div className="brand-title">SPASI PLATFORM</div>
+                <div className="brand-title">SARPRAS KAMPUS / INSTANSI</div>
                 <div className="asset-code">{ast.code}</div>
               </div>
 
@@ -85,12 +86,13 @@ function QRLabelsContent() {
                 {qrImages[ast.id] && <img src={qrImages[ast.id]} alt="QR Code" className="qr-img" />}
                 <div className="qr-details">
                   <div className="asset-name">{ast.name}</div>
-                  <div className="asset-cat">{ast.category?.name || 'Inventaris Instansi'}</div>
-                  {ast.brand && <div className="asset-brand">Brand: {ast.brand}</div>}
+                  <div className="asset-cat">{ast.category?.name || 'Inventaris Sarpras'}</div>
+                  {ast.department?.name && <div className="asset-brand">Unit: {ast.department.name}</div>}
+                  {ast.brand && <div className="asset-brand">Merek: {ast.brand}</div>}
                 </div>
               </div>
 
-              <div className="qr-label-footer">MILIK ORGANISASI / INSTANSI — JANGAN DILEPAS</div>
+              <div className="qr-label-footer">INVENTARIS RESMI — PINDAI DENGAN KAMERA HP</div>
             </div>
           ))}
         </div>

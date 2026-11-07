@@ -11,8 +11,6 @@ import { useToast } from '@/components/ui/Toast';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import { ArrowLeft, ClipboardCheck, LogIn } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
-
 type Condition = 'Baik' | 'Ada Minus' | 'Rusak';
 
 interface InspectionRow {

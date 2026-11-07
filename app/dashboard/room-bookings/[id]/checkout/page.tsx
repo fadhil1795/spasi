@@ -13,8 +13,6 @@ import {
   ArrowLeft, LogOut, ClipboardCheck, AlertTriangle, Camera, Upload, ShieldCheck, CheckCircle2
 } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
-
 type Condition = 'BAIK' | 'RUSAK_RINGAN' | 'RUSAK_BERAT' | 'HILANG' | 'TIDAK_DIPERIKSA';
 
 interface CheckoutRow {

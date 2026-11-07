@@ -25,6 +25,7 @@ import {
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  Printer,
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -260,7 +261,14 @@ export default function RoomDetailPage() {
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '0.6rem' }}>
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <Link
+            href={`/dashboard/rooms/${room.id}/kir`}
+            className="btn btn-secondary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+          >
+            <Printer size={16} /> Cetak KIR Ruangan
+          </Link>
           <Link
             href={`/dashboard/rooms/${room.id}/edit`}
             className="btn btn-secondary"

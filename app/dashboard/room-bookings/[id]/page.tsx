@@ -445,6 +445,29 @@ export default function AdminRoomBookingDetailPage() {
               )}
             </div>
 
+            {/* Rekening Pengembalian Jaminan (Deposit) */}
+            {booking.depositAmount > 0 && (
+              <div style={{ background: 'var(--color-surface2)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', padding: '0.9rem', marginBottom: '1.25rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                    Rekening Pengembalian Deposit
+                  </span>
+                  <Badge variant={booking.refundStatus === 'REFUNDED' ? 'success' : (booking.refundStatus === 'PENDING' ? 'warning' : 'neutral')}>
+                    {booking.refundStatus === 'REFUNDED' ? '✓ Telah Dikembalikan' : (booking.refundStatus === 'PENDING' ? '⏳ Menunggu Checkout' : 'Tidak Ada')}
+                  </Badge>
+                </div>
+                <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--color-text)' }}>
+                  {booking.bankName || 'Bank Belum Diisi'}
+                </div>
+                <div style={{ fontSize: '0.95rem', fontFamily: 'monospace', fontWeight: 800, color: 'var(--color-primary-light)', margin: '0.2rem 0' }}>
+                  {booking.bankAccountNumber || '-'}
+                </div>
+                <div style={{ fontSize: '0.78rem', color: 'var(--color-muted)' }}>
+                  a.n. {booking.bankAccountHolder || booking.renter?.name || '-'}
+                </div>
+              </div>
+            )}
+
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               <Link href={`/bookings/${booking.bookingNumber}`} target="_blank" className="btn btn-secondary" style={{ width: '100%', textDecoration: 'none', justifyContent: 'center' }}>
                 Lihat E-Voucher Digital

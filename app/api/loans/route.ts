@@ -146,84 +146,110 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Peminjaman tidak dapat dilakukan atau berakhir pada hari Sabtu/Minggu (weekend).' }, { status: 400 });
     }
 
-    // Conflict validation (Double booking check)
-    const existingConflict = await prisma.loan.findFirst({
-      where: {
-        assetId,
-        status: { in: ['PENDING_L1', 'PENDING_L2', 'APPROVED', 'ACTIVE'] },
-        OR: [
-          { startDate: { lte: end }, endDate: { gte: start } },
-        ],
-      },
+    // Asset availability and status check
+    const targetAsset = await prisma.asset.findUnique({ where: { id: assetId } });
+    if (!targetAsset) {
+      return NextResponse.json({ error: 'Aset tidak ditemukan' }, { status: 404 });
+    }
+    if (targetAsset.status === 'DISPOSED') {
+      return NextResponse.json(
+        { error: 'Aset ini telah diafkirkan / dihapus dari buku inventaris aktif dan tidak dapat dipinjam.' },
+        { status: 400 }
+      );
+    }
+    if (!targetAsset.isLoanable) {
+      return NextResponse.json(
+        { error: 'Aset ini tidak diaktifkan untuk peminjaman internal.' },
+        { status: 400 }
+      );
+    }
+
+    const clientIp = request.headers.get('x-forwarded-for') || '127.0.0.1';
+
+    // Atomic transaction to prevent parallel double-booking
+    const newLoan = await prisma.$transaction(async (tx) => {
+      // Conflict validation (Double booking check)
+      const existingConflict = await tx.loan.findFirst({
+        where: {
+          assetId,
+          status: { in: ['PENDING_L1', 'PENDING_L2', 'APPROVED', 'ACTIVE'] },
+          OR: [
+            { startDate: { lte: end }, endDate: { gte: start } },
+          ],
+        },
+      });
+
+      if (existingConflict) {
+        throw new Error('CONFLICT_DOUBLE_BOOKING');
+      }
+
+      // Maintenance validation check
+      const maintenanceConflict = await tx.maintenance.findFirst({
+        where: {
+          assetId,
+          status: { in: ['SCHEDULED', 'ONGOING'] },
+          OR: [
+            { startDate: { lte: end }, endDate: null },
+            { startDate: { lte: end }, endDate: { gte: start } }
+          ]
+        }
+      });
+
+      if (maintenanceConflict) {
+        throw new Error('CONFLICT_MAINTENANCE');
+      }
+
+      const count = await tx.loan.count();
+      const ticketNumber = generateLoanTicket(count + 1);
+
+      return await tx.loan.create({
+        data: {
+          ticketNumber,
+          userId,
+          assetId,
+          startDate: start,
+          endDate: end,
+          purpose,
+          notes,
+          permitPdfUrl,
+          status: 'PENDING_L1',
+          activityType: activityType || 'PERSONAL',
+          approvals: {
+            create: [
+              { level: 1, approverId: userId, status: 'PENDING' },
+            ],
+          },
+          consentLogs: {
+            create: [
+              {
+                userId,
+                consentType: 'GENERAL',
+                consentTextVersion: consentText || 'Pernyataan menyetujui syarat & ketentuan peminjaman inventaris SPASI',
+                ipAddress: clientIp,
+              },
+            ],
+          },
+        },
+        include: {
+          asset: true,
+        },
+      });
     });
 
-    if (existingConflict) {
+    return NextResponse.json(newLoan, { status: 201 });
+  } catch (error: any) {
+    if (error?.message === 'CONFLICT_DOUBLE_BOOKING') {
       return NextResponse.json(
         { error: 'Aset sudah di-booking oleh pengguna lain di jadwal tanggal tersebut.' },
         { status: 409 }
       );
     }
-
-    // Maintenance validation check
-    const maintenanceConflict = await prisma.maintenance.findFirst({
-      where: {
-        assetId,
-        status: { in: ['SCHEDULED', 'ONGOING'] },
-        OR: [
-          { startDate: { lte: end }, endDate: null },
-          { startDate: { lte: end }, endDate: { gte: start } }
-        ]
-      }
-    });
-
-    if (maintenanceConflict) {
+    if (error?.message === 'CONFLICT_MAINTENANCE') {
       return NextResponse.json(
-        { error: `Aset sedang dalam perawatan/maintenance rutin di tanggal tersebut (${maintenanceConflict.description}).` },
+        { error: 'Aset sedang dalam jadwal perawatan/maintenance rutin di rentang tanggal tersebut.' },
         { status: 409 }
       );
     }
-
-    const count = await prisma.loan.count();
-    const ticketNumber = generateLoanTicket(count + 1);
-
-    const clientIp = request.headers.get('x-forwarded-for') || '127.0.0.1';
-
-    const newLoan = await prisma.loan.create({
-      data: {
-        ticketNumber,
-        userId,
-        assetId,
-        startDate: start,
-        endDate: end,
-        purpose,
-        notes,
-        permitPdfUrl,
-        status: 'PENDING_L1',
-        activityType: activityType || 'PERSONAL',
-        approvals: {
-          create: [
-            { level: 1, approverId: userId, status: 'PENDING' },
-          ],
-        },
-        // Catat Consent Log persetujuan syarat elektronik
-        consentLogs: {
-          create: [
-            {
-              userId,
-              consentType: 'GENERAL',
-              consentTextVersion: consentText || 'Pernyataan menyetujui syarat & ketentuan peminjaman inventaris SPASI',
-              ipAddress: clientIp
-            }
-          ]
-        }
-      },
-      include: {
-        asset: true,
-      },
-    });
-
-    return NextResponse.json(newLoan, { status: 201 });
-  } catch (error) {
     console.error('Error creating loan:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

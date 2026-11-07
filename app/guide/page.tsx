@@ -24,8 +24,6 @@ import {
   HelpCircle,
 } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
-
 export default function GuidePage() {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 

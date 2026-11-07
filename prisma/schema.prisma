@@ -18,6 +18,8 @@ model Department {
   headId    String?
   users     User[]
   assets    Asset[]
+  locations Location[]
+  procurementRequests ProcurementRequest[]
 }
 
 model Location {
@@ -40,11 +42,15 @@ model Location {
   status             String                  @default("AVAILABLE") // AVAILABLE, RENTED, MAINTENANCE, INACTIVE
   facilities         String                  @db.Text // JSON string array of fasilitas ruangan
   photos             String                  @db.Text // JSON string array of foto ruangan
+  departmentId       String?
+  department         Department?             @relation(fields: [departmentId], references: [id])
   assets             Asset[]
   roomBookings       RoomBooking[]
   availabilityBlocks RoomAvailabilityBlock[]
   maintenance        Maintenance[]
   maintenanceSchedules MaintenanceSchedule[] @relation("LocationMaintenanceSchedules")
+  stockOpnameSessions StockOpnameSession[]
+  consumables         Consumable[]
 }
 
 model Category {
@@ -55,6 +61,8 @@ model Category {
   assets           Asset[]
   checklistTemplates ChecklistTemplate[]
   maintenanceSchedules MaintenanceSchedule[]
+  procurementItems     ProcurementItem[]
+  consumables          Consumable[]
 }
 
 model Asset {
@@ -88,6 +96,7 @@ model Asset {
   diasuransikan      Boolean             @default(false)
   noPolis            String?
   checklistItems     String              @db.Text // JSON array kelengkapan
+  customAttributes   String?             @db.Text // JSON string atribut dinamis kategori (plat nomor, cc, spek lab, dll)
   monthlyDepreciation Float?             // Nominal penyusutan nilai buku bulanan (Rp)
   lastDepreciationDate DateTime?          // Tanggal akumulasi depresiasi terakhir
   salvageValue       Float?              // Nilai sisa aset saat penghapusan (Rp)
@@ -100,6 +109,7 @@ model Asset {
   transfers          TransferLog[]
   bookingAddons      BookingAddonAsset[]
   bookingInspections BookingInspection[]
+  stockOpnameItems   StockOpnameItem[]
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @default(now()) @updatedAt
 }
@@ -138,6 +148,8 @@ model User {
   blacklistRecords     BlacklistRecord[]
   memberCard           MemberCard?
   groupMemberships     BorrowerGroupMember[]
+  stockOpnameSessions  StockOpnameSession[]
+  procurementRequests  ProcurementRequest[] @relation("procurementRequester")
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @default(now()) @updatedAt
 }
@@ -228,6 +240,12 @@ model Rental {
   operatorId    String?
   operator      Operator? @relation(fields: [operatorId], references: [id])
   operatorFee   Float?    @default(0)
+  bankName            String?
+  bankAccountNumber   String?
+  bankAccountHolder   String?
+  refundStatus        String    @default("NONE") // NONE, PENDING, REFUNDED
+  refundProofUrl      String?   @db.Text
+  pickupTime          DateTime?
   createdAt     DateTime  @default(now())
 }
 
@@ -277,6 +295,12 @@ model RoomBooking {
   paidAmount    Float               @default(0)         // Nominal yang sudah dibayar (Rp)
   notes         String?             @db.Text
   activityType  String              @default("PERSONAL") // INSTITUTION, ORGANIZATION, PERSONAL
+  bankName            String?                               // Nama Bank Refund
+  bankAccountNumber   String?                               // No Rekening Refund
+  bankAccountHolder   String?                               // Nama Pemilik Rekening
+  refundStatus        String              @default("NONE")  // NONE, PENDING, REFUNDED
+  refundProofUrl      String?             @db.Text          // Struk Bukti Transfer Balik Deposit
+  pickupTime          DateTime?                             // Jam Serah Terima Kunci/Ruang
   consentLogs   ConsentLog[]
   checkInTime   DateTime?
   checkOutTime  DateTime?
@@ -881,5 +905,131 @@ model WhatsAppSetting {
   headers         String?  @db.Text
   updatedAt       DateTime @default(now()) @updatedAt
 }
+
+// ─────────────────────────────────────────────────────────────
+// MODEL BARU: FASE 2 - AUDIT FISIK & STOCK OPNAME QR
+// ─────────────────────────────────────────────────────────────
+
+model StockOpnameSession {
+  id              String            @id @default(cuid())
+  sessionNumber   String            @unique // SO-2026-001
+  title           String            // e.g. "Stock Opname Tahunan Gedung A Lt. 2"
+  locationId      String
+  location        Location          @relation(fields: [locationId], references: [id])
+  startDate       DateTime          @default(now())
+  completedDate   DateTime?
+  status          String            @default("DRAFT") // DRAFT, IN_PROGRESS, COMPLETED, CANCELLED
+  auditorId       String
+  auditor         User              @relation(fields: [auditorId], references: [id])
+  totalExpected   Int               @default(0)
+  totalScanned    Int               @default(0)
+  totalMatch      Int               @default(0)
+  totalWrongLoc   Int               @default(0)
+  totalMissing    Int               @default(0)
+  totalDamaged    Int               @default(0)
+  notes           String?           @db.Text
+  items           StockOpnameItem[]
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+}
+
+model StockOpnameItem {
+  id                  String             @id @default(cuid())
+  sessionId           String
+  session             StockOpnameSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  assetId             String
+  asset               Asset              @relation(fields: [assetId], references: [id])
+  expectedLocationId  String?
+  actualLocationId    String?
+  scanStatus          String             // MATCH, WRONG_LOCATION, MISSING, UNREGISTERED
+  conditionBefore     String?            // Baik, Rusak Ringan, Rusak Berat
+  conditionAfter      String?            // Baik, Rusak Ringan, Rusak Berat
+  scannedAt           DateTime?
+  scannedById         String?
+  notes               String?            @db.Text
+  isResolved          Boolean            @default(false)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────
+// MODEL BARU: FASE 4 - PENGADAAN (PROCUREMENT) & AUTO REGISTRASI ASET
+// ─────────────────────────────────────────────────────────────
+
+model ProcurementRequest {
+  id               String            @id @default(cuid())
+  requestNumber    String            @unique // PB-2026-001
+  title            String            // e.g. "Pengadaan Proyektor & Layar Lab Multimedia"
+  departmentId     String
+  department       Department        @relation(fields: [departmentId], references: [id])
+  requestedById    String
+  requestedBy      User              @relation("procurementRequester", fields: [requestedById], references: [id])
+  targetFiscalYear Int               @default(2026)
+  estimatedBudget  Float             @default(0)
+  realizedBudget   Float?
+  status           String            @default("DRAFT") // DRAFT, SUBMITTED, APPROVED_DEPT, APPROVED_SARPRAS, IN_PURCHASE, RECEIVED, REJECTED
+  rejectionReason  String?           @db.Text
+  vendorName       String?
+  vendorContact    String?
+  invoiceDocUrl    String?           @db.Text
+  bastDocUrl       String?           @db.Text // Dokumen BAST Penerimaan Barang
+  items            ProcurementItem[]
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+}
+
+model ProcurementItem {
+  id              String             @id @default(cuid())
+  requestId       String
+  request         ProcurementRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  itemName        String
+  categoryId      String
+  category        Category           @relation(fields: [categoryId], references: [id])
+  brand           String?
+  unit            String?            @default("Unit")
+  specs           String?            @db.Text
+  quantity        Int                @default(1)
+  estimatedPrice  Float              @default(0)
+  realizedPrice   Float?
+  isRegistered    Boolean            @default(false) // Apakah unit sudah di-generate menjadi Asset aktif
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+}
+
+// ─────────────────────────────────────────────────────────────
+// MODEL BARU: FASE 4 - BARANG HABIS PAKAI (CONSUMABLES / ATK)
+// ─────────────────────────────────────────────────────────────
+
+model Consumable {
+  id              String                  @id @default(cuid())
+  code            String                  @unique // ATK-001
+  name            String                  // Spidol Whiteboard Snowman, Kertas HVS A4 80gr
+  categoryId      String?
+  category        Category?               @relation(fields: [categoryId], references: [id])
+  unit            String                  // Rim, Box, Pcs, Botol, Pack
+  stock           Int                     @default(0)
+  minimumStock    Int                     @default(5) // Ambang batas peringatan stok menipis
+  locationId      String?                 // Ruang penyimpanan / Gudang ATK
+  location        Location?               @relation(fields: [locationId], references: [id])
+  unitCost        Float?                  // Harga beli per satuan (Rp)
+  transactions    ConsumableTransaction[]
+  createdAt       DateTime                @default(now())
+  updatedAt       DateTime                @updatedAt
+}
+
+model ConsumableTransaction {
+  id              String      @id @default(cuid())
+  consumableId    String
+  consumable      Consumable  @relation(fields: [consumableId], references: [id], onDelete: Cascade)
+  type            String      // IN (Restock/Pengadaan), OUT (Permintaan Unit/Keluar)
+  quantity        Int
+  recipientName   String?     // Nama peminta / penerima barang
+  departmentName  String?     // Jurusan / Bagian peminta
+  notes           String?     @db.Text
+  transactionDate DateTime    @default(now())
+  recordedById    String?
+  createdAt       DateTime    @default(now())
+}
+
 
 

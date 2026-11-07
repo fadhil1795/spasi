@@ -198,8 +198,36 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       }
     }
 
-    // Kirim voucher PDF jika diverifikasi LUNAS
+    // Kirim voucher PDF & catat buku kas jika diverifikasi LUNAS
     if (payStatus === 'PAID' && !wasAlreadyPaid) {
+      // Catat Buku Kas Otomatis (CashTransaction)
+      try {
+        if (updated.totalAmount > 0) {
+          await prisma.cashTransaction.create({
+            data: {
+              type: 'IN',
+              category: 'RENTAL',
+              amount: updated.totalAmount,
+              referenceId: updated.bookingNumber,
+              description: `Penerimaan Pembayaran Sewa Ruang ${updated.location.name} (#${updated.bookingNumber}) - Penyewa: ${updated.renter.name}`,
+            },
+          });
+        }
+        if (updated.depositAmount > 0) {
+          await prisma.cashTransaction.create({
+            data: {
+              type: 'IN',
+              category: 'DEPOSIT',
+              amount: updated.depositAmount,
+              referenceId: updated.bookingNumber,
+              description: `Penerimaan Uang Jaminan / Deposit Sewa Ruang ${updated.location.name} (#${updated.bookingNumber})`,
+            },
+          });
+        }
+      } catch (cashErr) {
+        console.error('Error recording automatic cash transaction:', cashErr);
+      }
+
       const voucherData = {
         to: updated.renter.email,
         phone: updated.renter.phone,

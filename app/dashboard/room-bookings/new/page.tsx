@@ -220,6 +220,28 @@ function RoomBookingWizardContent() {
     })();
   }, [roomIdParam, session]);
 
+  const userRole = (session?.user as any)?.role || 'BORROWER';
+  const isAdminOrStaff = ['ADMIN', 'SUPER_ADMIN', 'STAFF'].includes(userRole);
+
+  useEffect(() => {
+    if (session?.user) {
+      if (session.user.name && !renterName) setRenterName(session.user.name);
+      if (session.user.email && !renterEmail) setRenterEmail(session.user.email);
+      const userPhone = (session.user as any).phone;
+      if (userPhone && !renterPhone) setRenterPhone(userPhone);
+      const userNik = (session.user as any).identityNo;
+      if (userNik && !renterNik) setRenterNik(userNik);
+
+      const cat = (session.user as any).renterCategory;
+      const role = (session.user as any).role;
+      if (cat === 'MAHASISWA' || cat === 'INTERNAL' || role === 'STAFF') {
+        setRenterCategory('MAHASISWA');
+      } else if (cat === 'EXTERNAL') {
+        setRenterCategory('EXTERNAL_SEWA');
+      }
+    }
+  }, [session]);
+
   useEffect(() => {
     if (step !== 2) return;
     (async () => {
@@ -742,17 +764,62 @@ function RoomBookingWizardContent() {
         <Card className="animate-fade-in" style={{ padding: '1.75rem' }}>
           <SectionTitle icon={<User size={20} />}>Langkah 3: Data Penyewa &amp; Unggah Dokumen Pendukung</SectionTitle>
 
-          {/* Kategori Penyewa */}
-          <div style={{ background: 'rgba(79,70,229,0.05)', border: '1px solid rgba(79,70,229,0.2)', padding: '1.25rem', borderRadius: 'var(--radius-md)', marginBottom: '1.25rem' }}>
-            <FieldLabel required>Kategori Penyewa / Peminjam</FieldLabel>
-            <select className="input-field" value={renterCategory} onChange={(e) => setRenterCategory(e.target.value as any)} style={{ width: '100%', fontWeight: 700 }}>
-              <option value="MAHASISWA">🎓 Mahasiswa / Internal Kampus (Gratis Sewa & Bebas Deposit)</option>
-              <option value="EXTERNAL_PINJAM">🤝 Eksternal Pinjam - Peminjaman Lembaga (Bebas Sewa, Dikenakan Deposit Jaminan)</option>
-              <option value="EXTERNAL_SEWA">💼 Eksternal Sewa - Komersial Umum (Dikenakan Tarif Sewa, Bebas Deposit)</option>
-            </select>
-            <div style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginTop: '0.4rem', lineHeight: 1.4 }}>
-              * Sistem akan otomatis menyesuaikan aturan biaya sewa ruangan/alat dan nominal deposit sesuai kategori yang dipilih.
+          {/* Kategori Penyewa Terdeteksi Otomatis */}
+          <div style={{
+            background: renterCategory === 'MAHASISWA' ? 'rgba(16,185,129,0.06)' : 'rgba(79,70,229,0.06)',
+            border: `1px solid ${renterCategory === 'MAHASISWA' ? 'rgba(16,185,129,0.25)' : 'rgba(79,70,229,0.25)'}`,
+            padding: '1.25rem',
+            borderRadius: 'var(--radius-md)',
+            marginBottom: '1.25rem'
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <span style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                Kategori Pemohon (Otomatis dari Akun)
+              </span>
+              <span style={{
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                color: renterCategory === 'MAHASISWA' ? 'var(--color-success)' : 'var(--color-primary)',
+                background: renterCategory === 'MAHASISWA' ? 'rgba(16,185,129,0.15)' : 'rgba(79,70,229,0.15)',
+                padding: '0.2rem 0.6rem',
+                borderRadius: '999px',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.3rem'
+              }}>
+                ✓ Terverifikasi Otomatis
+              </span>
             </div>
+
+            <div style={{ fontSize: '1.05rem', fontWeight: 800, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.35rem' }}>
+              {renterCategory === 'MAHASISWA' && '🎓 Mahasiswa / Sivitas Akademika Internal Kampus'}
+              {renterCategory === 'EXTERNAL_PINJAM' && '🤝 Eksternal Pinjam - Lembaga Non-Komersial'}
+              {renterCategory === 'EXTERNAL_SEWA' && '💼 Penyewa Eksternal / Komersial Umum'}
+            </div>
+
+            <div style={{ fontSize: '0.82rem', color: 'var(--color-muted)', lineHeight: 1.45 }}>
+              {renterCategory === 'MAHASISWA'
+                ? 'Status Anda terverifikasi sebagai sivitas akademika internal kampus. Fasilitas ruangan diberikan dengan tarif internal (bebas biaya sewa & bebas deposit jaminan) sesuai kebijakan sarpras.'
+                : 'Sesuai profil akun Anda, pemesanan diproses sesuai ketentuan tarif komersial umum.'}
+            </div>
+
+            {isAdminOrStaff && (
+              <div style={{ marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px dashed var(--color-border)' }}>
+                <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)', display: 'block', marginBottom: '0.35rem' }}>
+                  🛡️ Mode Admin / Petugas: Anda dapat mengubah kategori pemohon secara manual jika memesankan atas nama pihak lain:
+                </span>
+                <select
+                  className="input-field"
+                  value={renterCategory}
+                  onChange={(e) => setRenterCategory(e.target.value as any)}
+                  style={{ width: '100%', fontWeight: 700 }}
+                >
+                  <option value="MAHASISWA">🎓 Mahasiswa / Internal Kampus (Gratis Sewa & Bebas Deposit)</option>
+                  <option value="EXTERNAL_PINJAM">🤝 Eksternal Pinjam - Peminjaman Lembaga (Bebas Sewa, Dikenakan Deposit Jaminan)</option>
+                  <option value="EXTERNAL_SEWA">💼 Eksternal Sewa - Komersial Umum (Dikenakan Tarif Sewa, Bebas Deposit)</option>
+                </select>
+              </div>
+            )}
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>

@@ -9,8 +9,6 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { formatCurrency } from '@/lib/utils';
 import { Plus, Building2, Users, Clock, Package } from 'lucide-react';
 
-export const dynamic = 'force-dynamic';
-
 type RoomStatus = 'AVAILABLE' | 'RENTED' | 'MAINTENANCE' | 'INACTIVE';
 
 interface Room {
