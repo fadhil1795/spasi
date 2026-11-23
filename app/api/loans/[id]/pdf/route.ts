@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getAuthSession } from '@/lib/auth';
 import { formatDate } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request, { params }: { params: { id: string } }) {
   try {
+    const session = await getAuthSession();
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const [loan, tpl] = await Promise.all([
       prisma.loan.findUnique({
         where: { id: params.id },
@@ -21,6 +27,12 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
     if (!loan) {
       return NextResponse.json({ error: 'Loan tidak ditemukan' }, { status: 404 });
+    }
+
+    const userRole = (session.user as any)?.role || 'BORROWER';
+    const userId = (session.user as any)?.id;
+    if (userRole === 'BORROWER' && loan.userId !== userId && loan.user?.email !== session.user?.email) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
     }
 
     const createdMs = new Date(loan.createdAt).getTime();

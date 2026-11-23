@@ -1,11 +1,17 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getAuthSession } from '@/lib/auth';
 import * as XLSX from 'xlsx';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
+    const session = await getAuthSession();
+    const userRole = (session?.user as any)?.role || 'BORROWER';
+    if (!session || !['SUPER_ADMIN', 'ADMIN', 'STAFF'].includes(userRole)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
     // Ambil daftar kategori & subkategori untuk referensi
     const categories = await prisma.category.findMany({
       include: {

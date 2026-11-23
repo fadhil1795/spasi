@@ -13,6 +13,10 @@ export async function DELETE(
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const userRole = (session.user as any)?.role || 'BORROWER';
+    if (!['SUPER_ADMIN', 'ADMIN'].includes(userRole)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     await prisma.roomFacilityMaster.delete({ where: { id: params.id } });
     return NextResponse.json({ message: 'Fasilitas berhasil dihapus' });

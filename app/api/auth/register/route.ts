@@ -10,9 +10,21 @@ export async function POST(req: Request) {
       return NextResponse.json({ message: 'Semua kolom wajib diisi' }, { status: 400 });
     }
 
+    const cleanName = String(name).trim();
+    const cleanEmail = String(email).trim().toLowerCase();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!emailRegex.test(cleanEmail)) {
+      return NextResponse.json({ message: 'Format alamat email tidak valid' }, { status: 400 });
+    }
+
+    if (String(password).length < 8) {
+      return NextResponse.json({ message: 'Password minimal harus terdiri dari 8 karakter' }, { status: 400 });
+    }
+
     // Check if user already exists
     const existingUser = await prisma.user.findUnique({
-      where: { email },
+      where: { email: cleanEmail },
     });
 
     if (existingUser) {
@@ -28,8 +40,8 @@ export async function POST(req: Request) {
     // Create user
     const newUser = await prisma.user.create({
       data: {
-        name,
-        email,
+        name: cleanName,
+        email: cleanEmail,
         password: hashedPassword,
         role: 'BORROWER', // Default role untuk registrasi publik
       },

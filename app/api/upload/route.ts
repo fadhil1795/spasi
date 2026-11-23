@@ -50,6 +50,23 @@ export async function POST(request: Request) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
+    // Validasi Magic Bytes (Signature Biner) untuk mencegah file berbahaya yang disamarkan
+    const isJpeg = buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+    const isPng = buffer.length >= 4 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47;
+    const isGif = buffer.length >= 4 && buffer[0] === 0x47 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x38;
+    const isWebp =
+      buffer.length >= 12 &&
+      buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+      buffer.subarray(8, 12).toString('ascii') === 'WEBP';
+    const isPdf = buffer.length >= 5 && buffer.subarray(0, 5).toString('ascii') === '%PDF-';
+
+    if (!isJpeg && !isPng && !isGif && !isWebp && !isPdf) {
+      return NextResponse.json(
+        { error: 'Isi file tidak sesuai dengan format gambar atau PDF yang valid.' },
+        { status: 400 }
+      );
+    }
+
     // Create unique filename
     const timestamp = Date.now();
     const random = Math.floor(Math.random() * 10000);

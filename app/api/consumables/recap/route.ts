@@ -13,6 +13,10 @@ export async function GET(request: Request) {
   try {
     const session = await getAuthSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const userRole = (session.user as any)?.role || 'BORROWER';
+    if (!['SUPER_ADMIN', 'ADMIN', 'STAFF', 'APPROVER'].includes(userRole)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const { searchParams } = new URL(request.url);
     const now = new Date();

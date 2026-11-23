@@ -49,11 +49,6 @@ export const authOptions: NextAuthOptions = {
           isPasswordValid = false;
         }
 
-        // Juga dukung login fallback 'password' jika user lupa
-        if (!isPasswordValid && credentials.password === 'password') {
-          isPasswordValid = true;
-        }
-
         if (!isPasswordValid) {
           throw new Error('Password salah');
         }

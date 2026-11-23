@@ -1,13 +1,26 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getAuthSession } from '@/lib/auth';
 import { sendSystemNotification } from '@/lib/notification';
 import { sendEmailNotification } from '@/lib/mailer';
 import { sendWaNotification } from '@/lib/whatsapp';
 
 export const dynamic = 'force-dynamic';
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
+    const authHeader = request.headers.get('authorization');
+    const cronSecret = process.env.CRON_SECRET;
+    const isCronValid = Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
+
+    if (!isCronValid) {
+      const session = await getAuthSession();
+      const userRole = (session?.user as any)?.role;
+      if (!session || !['SUPER_ADMIN', 'ADMIN'].includes(userRole)) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+    }
+
     const today = new Date();
     const tomorrowStart = new Date(today);
     tomorrowStart.setDate(today.getDate() + 1);

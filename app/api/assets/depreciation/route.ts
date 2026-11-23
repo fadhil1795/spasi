@@ -9,6 +9,10 @@ export async function GET() {
   try {
     const session = await getAuthSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const userRole = (session.user as any)?.role || 'BORROWER';
+    if (!['SUPER_ADMIN', 'ADMIN', 'STAFF'].includes(userRole)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const assets = await prisma.asset.findMany({
       include: { category: true },

@@ -1,15 +1,22 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getAuthSession } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
-    // Optional: Add a simple auth check for cron services
-    // const authHeader = request.headers.get('authorization');
-    // if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    //   return new Response('Unauthorized', { status: 401 });
-    // }
+    const authHeader = request.headers.get('authorization');
+    const cronSecret = process.env.CRON_SECRET;
+    const isCronValid = Boolean(cronSecret && authHeader === `Bearer ${cronSecret}`);
+
+    if (!isCronValid) {
+      const session = await getAuthSession();
+      const userRole = (session?.user as any)?.role;
+      if (!session || !['SUPER_ADMIN', 'ADMIN'].includes(userRole)) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+      }
+    }
 
     // Fetch system settings for autoCancelHours
     let setting = await prisma.systemSetting.findUnique({ where: { id: 'default' } });

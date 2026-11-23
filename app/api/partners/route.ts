@@ -1,8 +1,15 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getAuthSession } from "@/lib/auth";
 
 export async function GET() {
   try {
+    const session = await getAuthSession();
+    const userRole = (session?.user as any)?.role;
+    if (!session || !['SUPER_ADMIN', 'ADMIN'].includes(userRole)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const partners = await prisma.partner.findMany({
       orderBy: { createdAt: 'desc' }
     });
@@ -15,6 +22,12 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const session = await getAuthSession();
+    const userRole = (session?.user as any)?.role;
+    if (!session || !['SUPER_ADMIN', 'ADMIN'].includes(userRole)) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
     const body = await request.json();
     const { name, company, phone, email } = body;
 

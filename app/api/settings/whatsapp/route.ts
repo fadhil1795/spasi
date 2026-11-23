@@ -34,7 +34,11 @@ export async function GET() {
       });
     }
 
-    return NextResponse.json(setting);
+    return NextResponse.json({
+      ...setting,
+      apiKey: setting.apiKey ? '••••••••••••••••' : '',
+      _hasApiKey: Boolean(setting.apiKey),
+    });
   } catch (error) {
     console.error('Error fetching WhatsApp settings:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -56,28 +60,33 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { provider, apiUrl, apiKey, instanceName, payloadTemplate, headers } = body;
 
+    const updateData: any = {
+      provider: provider || 'EVOLUTION',
+      apiUrl: apiUrl || '',
+      instanceName: instanceName || '',
+      payloadTemplate: payloadTemplate || '',
+      headers: headers || '',
+    };
+
+    if (apiKey !== undefined && !String(apiKey).startsWith('•')) {
+      updateData.apiKey = apiKey || '';
+    }
+
     const setting = await prisma.whatsAppSetting.upsert({
       where: { id: 'default' },
-      update: {
-        provider: provider || 'EVOLUTION',
-        apiUrl: apiUrl || '',
-        apiKey: apiKey || '',
-        instanceName: instanceName || '',
-        payloadTemplate: payloadTemplate || '',
-        headers: headers || '',
-      },
+      update: updateData,
       create: {
         id: 'default',
-        provider: provider || 'EVOLUTION',
-        apiUrl: apiUrl || '',
-        apiKey: apiKey || '',
-        instanceName: instanceName || '',
-        payloadTemplate: payloadTemplate || '',
-        headers: headers || '',
+        ...updateData,
+        apiKey: updateData.apiKey || '',
       },
     });
 
-    return NextResponse.json(setting);
+    return NextResponse.json({
+      ...setting,
+      apiKey: setting.apiKey ? '••••••••••••••••' : '',
+      _hasApiKey: Boolean(setting.apiKey),
+    });
   } catch (error) {
     console.error('Error updating WhatsApp settings:', error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
