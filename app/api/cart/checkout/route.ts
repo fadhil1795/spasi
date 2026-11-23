@@ -24,6 +24,9 @@ function generateBookingNumber(prefix: string) {
 export async function POST(req: Request) {
   try {
     const session = await getServerSession(authOptions);
+    if (!session) {
+      return NextResponse.json({ error: 'Unauthorized: Silakan login untuk melakukan checkout' }, { status: 401 });
+    }
     const body = await req.json();
     const { cartItems, renterData, payMethod, totalAmount, depositAmount } = body;
 

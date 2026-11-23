@@ -13,14 +13,16 @@ export async function GET() {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const userId = (session.user as any)?.id;
     const user = await prisma.user.findUnique({
-      where: { email: session.user.email },
+      where: userId ? { id: userId } : { email: session.user.email },
       select: {
         id: true,
         name: true,
         email: true,
         password: true,
         role: true,
+        renterCategory: true,
         phone: true,
         identityNo: true,
         avatarUrl: true,
@@ -58,8 +60,9 @@ export async function PUT(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const userId = (session.user as any)?.id;
     const currentUser = await prisma.user.findUnique({
-      where: { email: session.user.email },
+      where: userId ? { id: userId } : { email: session.user.email },
     });
 
     if (!currentUser) {

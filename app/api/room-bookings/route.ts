@@ -36,13 +36,14 @@ export async function GET(request: Request) {
     if (locationId) where.locationId = locationId;
 
     if (myBookings || (session?.user && (session.user as any).role === 'BORROWER')) {
-      if (session?.user?.email) {
-        where.renter = {
-          OR: [
-            { email: session.user.email },
-            { phone: (session.user as any).phone || undefined },
-          ],
-        };
+      const renterOr: any[] = [];
+      if (session?.user?.email) renterOr.push({ email: session.user.email });
+      const userPhone = String((session?.user as any)?.phone || '').trim();
+      if (userPhone) renterOr.push({ phone: userPhone });
+      if (renterOr.length > 0) {
+        where.renter = { OR: renterOr };
+      } else {
+        where.id = '__none__';
       }
     }
 
@@ -81,8 +82,9 @@ export async function POST(request: Request) {
       bankName, bankAccountNumber, bankAccountHolder,
     } = body;
 
-    if (!locationId || !startTime || !endTime || !renterName || !renterPhone) {
-      return NextResponse.json({ error: 'Data booking tidak lengkap' }, { status: 400 });
+    const hasAddons = Array.isArray(addonAssets) && addonAssets.length > 0;
+    if ((!locationId && !hasAddons) || !startTime || !endTime || !renterName || !renterPhone) {
+      return NextResponse.json({ error: 'Data booking tidak lengkap (pilih minimal 1 ruangan atau 1 aset Sarpras)' }, { status: 400 });
     }
 
     const start = new Date(startTime);
@@ -94,12 +96,15 @@ export async function POST(request: Request) {
 
     // 1. Quota Validation Check
     const userId = (session?.user as any)?.id;
-    const activeBookingsCount = await prisma.roomBooking.count({
-      where: {
-        renterId: userId,
-        bookingStatus: { in: ['PENDING', 'CONFIRMED', 'ACTIVE'] }
-      }
-    });
+    const userEmail = session?.user?.email;
+    const activeBookingsCount = userEmail
+      ? await prisma.roomBooking.count({
+          where: {
+            renter: { email: userEmail },
+            bookingStatus: { in: ['PENDING', 'PENDING_L1', 'PENDING_L2', 'APPROVED', 'CONFIRMED', 'ACTIVE', 'RETURN_REQUESTED'] },
+          },
+        })
+      : 0;
 
     const activeLoansCount = await prisma.loan.count({
       where: {
@@ -178,19 +183,19 @@ export async function POST(request: Request) {
     if (diffHours < 1) {
       return NextResponse.json({ error: 'Durasi minimal pemesanan ruangan adalah 1 jam.' }, { status: 400 });
     }
-    if (diffHours > 12) {
-      return NextResponse.json({ error: 'Durasi maksimal pemesanan ruangan adalah 12 jam per hari.' }, { status: 400 });
+    if (rentalType !== 'DAILY' && diffHours > 12) {
+      return NextResponse.json({ error: 'Durasi maksimal pemesanan ruangan per jam adalah 12 jam per hari.' }, { status: 400 });
     }
 
-    // Get room rate
-    const room = await prisma.location.findUnique({ where: { id: locationId } });
-    if (!room) return NextResponse.json({ error: 'Ruangan tidak ditemukan' }, { status: 404 });
+    // Get room rate (jika memilih ruangan)
+    const room = locationId ? await prisma.location.findUnique({ where: { id: locationId } }) : null;
+    if (locationId && !room) return NextResponse.json({ error: 'Ruangan tidak ditemukan' }, { status: 404 });
 
     // Validate access based on isLoanable & isRentable settings
     const requesterRole = (session?.user as any)?.role || 'BORROWER';
     const requesterCategory = (session?.user as any)?.renterCategory || 'EXTERNAL';
 
-    if (requesterRole === 'BORROWER') {
+    if (room && requesterRole === 'BORROWER') {
       if (requesterCategory === 'EXTERNAL') {
         if (!room.isRentable) {
           return NextResponse.json({ error: 'Akses terbatas. Ruangan ini tidak disewakan untuk Eksternal.' }, { status: 403 });
@@ -204,7 +209,11 @@ export async function POST(request: Request) {
     }
 
     const durationHours = calculateDurationHours(start, end);
-    const originalRoomRate = rentalType === 'DAILY' ? (room.pricePerDay || (room.pricePerHour || 0) * 8) : (room.pricePerHour || 0);
+    const originalRoomRate = room
+      ? rentalType === 'DAILY'
+        ? (room.pricePerDay || (room.pricePerHour || 0) * 8)
+        : (room.pricePerHour || 0)
+      : 0;
 
     // Apply conditional calculations based on renterCategory
     let roomRate = originalRoomRate;
@@ -216,12 +225,12 @@ export async function POST(request: Request) {
     const duration = rentalType === 'DAILY' ? Math.max(1, Math.ceil(durationHours / 24)) : durationHours;
 
     if (renterCategory === 'MAHASISWA') {
-      const isFree = room.isLoanable;
+      const isFree = room ? room.isLoanable : true;
       if (isFree) {
         roomRate = 0;
         roomSubtotal = 0;
         addonSubtotal = 0;
-        depositAmount = room.requiresDepositForInternal ? (room.depositAmount || 0) : 0;
+        depositAmount = room?.requiresDepositForInternal ? (room.depositAmount || 0) : 0;
         finalPayStatus = depositAmount > 0 ? (inputPayStatus || 'UNPAID') : 'PAID';
       } else {
         // Paid room for internal
@@ -231,14 +240,17 @@ export async function POST(request: Request) {
         addonSubtotal = addonList.reduce((sum: number, a: any) => {
           return sum + (parseFloat(a.ratePerSession) * parseInt(a.quantity));
         }, 0);
-        depositAmount = room.requiresDepositForInternal ? (room.depositAmount || 0) : 0;
+        depositAmount = room?.requiresDepositForInternal ? (room.depositAmount || 0) : 0;
         finalPayStatus = inputPayStatus || 'UNPAID';
       }
     } else if (renterCategory === 'EXTERNAL_PINJAM') {
       roomRate = 0;
       roomSubtotal = 0;
       addonSubtotal = 0;
-      depositAmount = inputDepositAmount ? parseFloat(inputDepositAmount) : (room.depositAmount || 0);
+      depositAmount =
+        inputDepositAmount !== undefined && inputDepositAmount !== null
+          ? parseFloat(inputDepositAmount)
+          : (room?.depositAmount || 0);
       finalPayStatus = depositAmount > 0 ? (inputPayStatus || 'UNPAID') : 'PAID';
     } else { // EXTERNAL_SEWA
       roomRate = originalRoomRate;
@@ -247,7 +259,10 @@ export async function POST(request: Request) {
       addonSubtotal = addonList.reduce((sum: number, a: any) => {
         return sum + (parseFloat(a.ratePerSession) * parseInt(a.quantity));
       }, 0);
-      depositAmount = inputDepositAmount ? parseFloat(inputDepositAmount) : (room.depositAmount || 0);
+      depositAmount =
+        inputDepositAmount !== undefined && inputDepositAmount !== null
+          ? parseFloat(inputDepositAmount)
+          : (room?.depositAmount || 0);
       finalPayStatus = inputPayStatus || 'UNPAID';
     }
 
@@ -256,26 +271,28 @@ export async function POST(request: Request) {
 
     // Concurrency-safe atomic transaction
     const booking = await prisma.$transaction(async (tx) => {
-      // Anti-double booking check (CONFIRMED, ACTIVE, or PENDING with active payment window)
-      const conflict = await tx.roomBooking.findFirst({
-        where: {
-          locationId,
-          OR: [
-            { bookingStatus: { in: ['CONFIRMED', 'ACTIVE'] } },
-            {
-              bookingStatus: 'PENDING',
-              paymentExpiredAt: { gt: new Date() },
-            },
-          ],
-          AND: [
-            { startTime: { lt: end } },
-            { endTime: { gt: start } },
-          ],
-        },
-      });
+      // Anti-double booking check (jika menggunakan ruangan)
+      if (locationId) {
+        const conflict = await tx.roomBooking.findFirst({
+          where: {
+            locationId,
+            OR: [
+              { bookingStatus: { in: ['CONFIRMED', 'APPROVED', 'ACTIVE', 'RETURN_REQUESTED'] } },
+              {
+                bookingStatus: { in: ['PENDING', 'PENDING_L1', 'PENDING_L2'] },
+                paymentExpiredAt: { gt: new Date() },
+              },
+            ],
+            AND: [
+              { startTime: { lt: end } },
+              { endTime: { gt: start } },
+            ],
+          },
+        });
 
-      if (conflict) {
-        throw new Error('CONFLICT_DOUBLE_BOOKING');
+        if (conflict) {
+          throw new Error('CONFLICT_DOUBLE_BOOKING');
+        }
       }
 
       // Find or create renter
@@ -299,7 +316,7 @@ export async function POST(request: Request) {
       return await tx.roomBooking.create({
         data: {
           bookingNumber,
-          locationId,
+          locationId: locationId || null,
           renterId: renter.id,
           startTime: start,
           endTime: end,
@@ -324,7 +341,7 @@ export async function POST(request: Request) {
           bankAccountHolder: bankAccountHolder || null,
           refundStatus: depositAmount > 0 ? 'PENDING' : 'NONE',
           addonAssets: {
-            create: (Array.isArray(addonAssets) && renterCategory === 'EXTERNAL_SEWA')
+            create: Array.isArray(addonAssets) && addonAssets.length > 0
               ? addonAssets.map((a: any) => ({
                   assetId: a.assetId,
                   assetName: a.assetName || '',

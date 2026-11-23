@@ -35,6 +35,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   try {
     const session = await getAuthSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const userRole = (session.user as any)?.role || 'BORROWER';
+    if (!['SUPER_ADMIN', 'ADMIN', 'APPROVER', 'STAFF'].includes(userRole)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const body = await request.json();
     const { status, rejectionReason, vendorName, vendorContact, realizedBudget, invoiceDocUrl, bastDocUrl } = body;

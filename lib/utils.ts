@@ -22,6 +22,32 @@ export function generateAssetCode(seq: number): string {
   return `AST-${year}-${padSeq}`;
 }
 
+export function generateStandardAssetCode(params: {
+  deptCode?: string | null;
+  categoryCode?: string | null;
+  seq: number;
+}): string {
+  const year = new Date().getFullYear();
+  const padSeq = String(params.seq).padStart(4, '0');
+  
+  // Format Departemen: bersihkan 'DEPT-' jika ada
+  let dept = (params.deptCode || 'SARPRAS')
+    .toUpperCase()
+    .replace(/^DEPT-/, '')
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 8);
+  if (!dept) dept = 'SARPRAS';
+
+  // Format Kategori
+  let cat = (params.categoryCode || 'AST')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 6);
+  if (!cat) cat = 'AST';
+
+  return `${dept}-${cat}-${year}-${padSeq}`;
+}
+
 export function generateLoanTicket(seq: number): string {
   const year = new Date().getFullYear();
   const padSeq = String(seq).padStart(4, '0');

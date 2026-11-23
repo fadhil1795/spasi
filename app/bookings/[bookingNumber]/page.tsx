@@ -26,7 +26,7 @@ export default function BookingStatusPage() {
   }, []);
 
   useEffect(() => {
-    if (booking && qrCanvasRef.current && ['CONFIRMED', 'ACTIVE', 'COMPLETED'].includes(booking.bookingStatus)) {
+    if (booking && qrCanvasRef.current && ['CONFIRMED', 'ACTIVE', 'RETURN_REQUESTED', 'COMPLETED', 'COMPLETED_WITH_CLAIM'].includes(booking.bookingStatus)) {
       QRCode.toCanvas(qrCanvasRef.current, booking.bookingNumber, { width: 200, margin: 2 }).catch(() => {});
     }
   }, [booking]);
@@ -50,16 +50,24 @@ export default function BookingStatusPage() {
   };
 
   const statusConfig: Record<string, { label: string; color: string; icon: any; desc: string }> = {
-    PENDING: { label: 'Menunggu Konfirmasi', color: 'var(--color-warning)', icon: Clock, desc: 'Booking Anda sedang ditinjau oleh admin. Kami akan segera mengkonfirmasi.' },
+    PENDING: { label: 'Menunggu Persetujuan', color: 'var(--color-warning)', icon: Clock, desc: 'Booking Anda sedang ditinjau oleh admin. Kami akan segera mengkonfirmasi.' },
+    APPROVED: { label: 'Disetujui (Menunggu Pembayaran)', color: 'var(--color-info)', icon: Clock, desc: 'Pengajuan disetujui! Silakan lakukan pembayaran agar booking terkonfirmasi.' },
     CONFIRMED: { label: 'Dikonfirmasi!', color: 'var(--color-primary)', icon: CheckCircle, desc: 'Booking Anda telah dikonfirmasi. Tunjukkan QR Code ini saat Check-In.' },
-    ACTIVE: { label: 'Sedang Aktif', color: 'var(--color-success)', icon: CheckCircle, desc: 'Ruangan sedang dalam penggunaan Anda.' },
-    COMPLETED: { label: 'Selesai', color: 'var(--color-muted)', icon: CheckCircle, desc: 'Terima kasih! Sewa ruangan telah selesai.' },
+    ACTIVE: { label: 'Sedang Aktif', color: 'var(--color-success)', icon: CheckCircle, desc: 'Ruangan / peralatan Sarpras sedang dalam penggunaan Anda.' },
+    RETURN_REQUESTED: { label: 'Ajuan Selesai Pakai', color: 'var(--color-warning)', icon: Clock, desc: 'Pengajuan selesai pemakaian telah dikirim. Menunggu inspeksi Check-Out petugas.' },
+    COMPLETED: { label: 'Selesai', color: 'var(--color-muted)', icon: CheckCircle, desc: 'Terima kasih! Sewa / peminjaman Sarpras telah selesai.' },
     COMPLETED_WITH_CLAIM: { label: 'Selesai (Ada Klaim)', color: 'var(--color-danger)', icon: CheckCircle, desc: 'Sewa selesai dengan catatan klaim kerusakan/kehilangan.' },
     CANCELLED: { label: 'Dibatalkan', color: 'var(--color-danger)', icon: Clock, desc: 'Booking telah dibatalkan.' },
   };
 
-  const steps = ['PENDING', 'CONFIRMED', 'ACTIVE', 'COMPLETED'];
-  const currentStep = steps.indexOf(booking?.bookingStatus) === -1 ? 0 : steps.indexOf(booking?.bookingStatus);
+  const steps = ['PENDING', 'APPROVED', 'CONFIRMED', 'ACTIVE', 'COMPLETED'];
+  const normalizedStepStatus =
+    booking?.bookingStatus === 'RETURN_REQUESTED'
+      ? 'ACTIVE'
+      : booking?.bookingStatus === 'COMPLETED_WITH_CLAIM'
+      ? 'COMPLETED'
+      : booking?.bookingStatus;
+  const currentStep = steps.indexOf(normalizedStepStatus) === -1 ? 0 : steps.indexOf(normalizedStepStatus);
 
   if (loading) {
     return (
@@ -123,8 +131,8 @@ export default function BookingStatusPage() {
         </div>
       </Card>
 
-      {/* Payment Action Banner if Unpaid */}
-      {['UNPAID', 'PENDING'].includes(booking.payStatus) && (
+      {/* Payment Action Banner if Unpaid / Rejected / Down Payment */}
+      {['UNPAID', 'PENDING', 'REJECTED', 'DOWN_PAYMENT'].includes(booking.payStatus) && !['CANCELLED', 'COMPLETED', 'COMPLETED_WITH_CLAIM'].includes(booking.bookingStatus) && (
         <Card style={{ padding: '1.25rem', marginBottom: '1.25rem', background: 'var(--color-warning-bg, rgba(234,179,8,0.12))', border: '1px solid var(--color-warning, #eab308)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
           <div>
             <div style={{ fontWeight: 800, color: 'var(--color-warning, #eab308)', fontSize: '1.05rem', marginBottom: '0.2rem' }}>⚠️ Pembayaran Belum Selesai</div>
@@ -149,19 +157,25 @@ export default function BookingStatusPage() {
             Detail Ruangan
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.88rem' }}>
-            <div><span style={{ color: 'var(--color-muted)' }}>Ruangan:</span> <strong>{booking.location?.name}</strong></div>
-            <div><span style={{ color: 'var(--color-muted)' }}>Kode:</span> {booking.location?.code}</div>
-            <div><span style={{ color: 'var(--color-muted)' }}>Lokasi:</span> {booking.location?.building}</div>
+            <div><span style={{ color: 'var(--color-muted)' }}>Fasilitas:</span> <strong>{booking.location?.name || 'Paket Peralatan Sarpras'}</strong></div>
+            <div><span style={{ color: 'var(--color-muted)' }}>Kode:</span> {booking.location?.code || '-'}</div>
+            <div><span style={{ color: 'var(--color-muted)' }}>Lokasi:</span> {booking.location?.building || '-'}</div>
             <div><span style={{ color: 'var(--color-muted)' }}>Mulai:</span> <strong>{new Date(booking.startTime).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</strong></div>
             <div><span style={{ color: 'var(--color-muted)' }}>Selesai:</span> <strong>{new Date(booking.endTime).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</strong></div>
             <div><span style={{ color: 'var(--color-muted)' }}>Durasi:</span> {booking.durationHours} Jam</div>
+            {booking.checkInTime && (
+              <div><span style={{ color: 'var(--color-muted)' }}>Check-In Aktual:</span> <strong style={{ color: 'var(--color-info)' }}>{new Date(booking.checkInTime).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</strong></div>
+            )}
+            {booking.checkOutTime && (
+              <div><span style={{ color: 'var(--color-muted)' }}>Check-Out Aktual:</span> <strong style={{ color: 'var(--color-success)' }}>{new Date(booking.checkOutTime).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })}</strong></div>
+            )}
           </div>
         </Card>
 
         {/* QR Code E-Voucher */}
         <Card style={{ padding: '1.25rem', textAlign: 'center' }}>
           <div style={{ fontWeight: 700, marginBottom: '0.75rem', fontSize: '0.9rem' }}>📲 E-Voucher QR Code</div>
-          {['CONFIRMED', 'ACTIVE', 'COMPLETED'].includes(booking.bookingStatus) ? (
+          {['CONFIRMED', 'ACTIVE', 'RETURN_REQUESTED', 'COMPLETED', 'COMPLETED_WITH_CLAIM'].includes(booking.bookingStatus) ? (
             <>
               <canvas ref={qrCanvasRef} style={{ borderRadius: 'var(--radius-md)' }} />
               <p style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginTop: '0.5rem', marginBottom: '0.75rem' }}>Tunjukkan ke petugas saat Check-In</p>

@@ -102,6 +102,18 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     // Aksi Tambahan berdasarkan perubahan status
     if (status === 'INVESTIGATING') {
+      // Nonaktifkan sementara aset rusak jika deactivateAsset === true
+      if (body.deactivateAsset === true) {
+        const targetAssetId = claim.loan?.assetId ||
+          claim.booking?.inspections?.find((ins) => ins.type === 'CHECK_OUT' && (ins.isDamaged || ins.isMissing))?.assetId;
+        if (targetAssetId) {
+          await prisma.asset.update({
+            where: { id: targetAssetId },
+            data: { status: 'MAINTENANCE', isLoanable: false },
+          });
+        }
+      }
+
       // Catat audit log
       await createAuditLog({
         userId,
@@ -125,6 +137,18 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         email: claim.user.email,
         phone: claim.user.phone,
       });
+
+      // Nonaktifkan sementara aset rusak jika deactivateAsset === true
+      if (body.deactivateAsset === true) {
+        const targetAssetId = claim.loan?.assetId ||
+          claim.booking?.inspections?.find((ins) => ins.type === 'CHECK_OUT' && (ins.isDamaged || ins.isMissing))?.assetId;
+        if (targetAssetId) {
+          await prisma.asset.update({
+            where: { id: targetAssetId },
+            data: { status: 'MAINTENANCE', isLoanable: false },
+          });
+        }
+      }
 
       // Catat audit log
       await createAuditLog({
@@ -173,19 +197,22 @@ export async function PATCH(request: Request, { params }: { params: { id: string
             data: { status: 'AVAILABLE', condition: 'Baik' },
           });
         } else if (claim.type === 'DAMAGED') {
-          // SOP Langkah 4: Jika aset rusak, teruskan otomatis ke modul Maintenance
-          await prisma.maintenance.create({
-            data: {
-              assetId,
-              type: 'CORRECTIVE',
-              description: `Pemeliharaan korektif pasca kerusakan sewa/pinjam oleh user "${claim.user.name}". Didanai lunas dari biaya klaim denda ganti rugi ${claim.claimNumber}.`,
-              cost: updatedClaim.amount,
-              startDate: new Date(),
-              status: 'ONGOING',
-              claimId: claim.id,
-              notes: `Diteruskan otomatis dari modul Klaim Ganti Rugi. Catatan review: ${adminNotes || ''}`,
-            }
-          });
+          // SOP Langkah 4: Jika aset rusak, teruskan otomatis ke modul Maintenance (cek duplikasi claimId)
+          const existingMaint = await prisma.maintenance.findUnique({ where: { claimId: claim.id } });
+          if (!existingMaint) {
+            await prisma.maintenance.create({
+              data: {
+                assetId,
+                type: 'CORRECTIVE',
+                description: `Pemeliharaan korektif pasca kerusakan sewa/pinjam oleh user "${claim.user.name}". Didanai lunas dari biaya klaim denda ganti rugi ${claim.claimNumber}.`,
+                cost: updatedClaim.amount,
+                startDate: new Date(),
+                status: 'ONGOING',
+                claimId: claim.id,
+                notes: `Diteruskan otomatis dari modul Klaim Ganti Rugi. Catatan review: ${adminNotes || ''}`,
+              }
+            });
+          }
 
           // Ubah status aset menjadi MAINTENANCE
           await prisma.asset.update({
@@ -193,6 +220,19 @@ export async function PATCH(request: Request, { params }: { params: { id: string
             data: { status: 'MAINTENANCE', condition: 'Rusak Ringan' },
           });
         }
+      }
+
+      // Catat kas masuk bila pelunasan tagihan klaim (NEW_BILL)
+      if (updatedClaim.amount > 0 && updatedClaim.sourceFunding === 'NEW_BILL' && claim.status !== 'RESOLVED') {
+        await prisma.cashTransaction.create({
+          data: {
+            type: 'IN',
+            category: 'PENALTY',
+            amount: updatedClaim.amount,
+            referenceId: claim.claimNumber,
+            description: `Pelunasan Klaim Ganti Rugi #${claim.claimNumber} (${assetName}) - ${claim.user.name}`,
+          },
+        });
       }
 
       // 3. Check apakah user masih mempunyai tagihan pending/hilang/kerusakan lain.

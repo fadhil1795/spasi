@@ -110,29 +110,73 @@ export default function HistoryLogPage() {
     });
   });
 
-  // 3. Internal Asset Loans
+  // 3. Internal Asset Loans (grouped by groupCode or ±5s same-transaction fallback)
+  const loanGroups: Array<{ groupCode: string | null; items: any[]; createdAtMs: number }> = [];
+  const loanGroupMap = new Map<string, { groupCode: string | null; items: any[]; createdAtMs: number }>();
+
   internalLoans.forEach((l) => {
+    if (l.groupCode) {
+      const existing = loanGroupMap.get(l.groupCode);
+      if (existing) {
+        existing.items.push(l);
+      } else {
+        const g = { groupCode: l.groupCode, items: [l], createdAtMs: new Date(l.createdAt).getTime() };
+        loanGroupMap.set(l.groupCode, g);
+        loanGroups.push(g);
+      }
+    } else {
+      const createdMs = new Date(l.createdAt).getTime();
+      const matchLegacy = loanGroups.find(
+        (g) =>
+          !g.groupCode &&
+          g.items[0]?.userId === l.userId &&
+          g.items[0]?.startDate === l.startDate &&
+          g.items[0]?.endDate === l.endDate &&
+          g.items[0]?.purpose === l.purpose &&
+          Math.abs(g.createdAtMs - createdMs) <= 5000
+      );
+      if (matchLegacy) {
+        matchLegacy.items.push(l);
+      } else {
+        loanGroups.push({ groupCode: null, items: [l], createdAtMs: createdMs });
+      }
+    }
+  });
+
+  loanGroups.forEach((g) => {
+    const primary = g.items[0];
+    const isMulti = g.items.length > 1;
+    const totalUnits = g.items.reduce((sum, item) => sum + (item.quantity || 1), 0);
+    const assetNames = g.items.map((item) => item.asset?.name || 'Aset').join(', ');
+    const assetCodes = g.items.map((item) => item.asset?.code || '-').join(', ');
+
+    const timeParts: string[] = [];
+    if (primary.checkInTime) timeParts.push(`Ambil: ${formatDate(primary.checkInTime, 'dd MMM yyyy, HH:mm')}`);
+    if (primary.checkOutTime) timeParts.push(`Kembali: ${formatDate(primary.checkOutTime, 'dd MMM yyyy, HH:mm')}`);
+
     unifiedHistory.push({
-      id: l.id,
-      ticketNo: l.ticketNumber,
+      id: primary.id,
+      ticketNo: g.groupCode || primary.ticketNumber,
       type: 'INTERNAL_LOAN',
       typeLabel: '🛠️ Peminjaman Internal',
-      title: l.asset?.name || 'Aset Internal',
-      subtitle: `Kode: ${l.asset?.code || '-'}`,
-      renterName: l.user?.name || '-',
-      dateFormatted: `${formatDate(l.startDate, 'dd MMM yyyy')} - ${formatDate(l.endDate, 'dd MMM yyyy')}`,
-      rawDate: new Date(l.createdAt),
+      title: isMulti ? `Paket ${g.items.length} Aset: ${assetNames}` : (primary.asset?.name || 'Aset Internal'),
+      subtitle: isMulti
+        ? `${totalUnits} Unit • ${assetCodes}${timeParts.length ? ` • ${timeParts.join(' | ')}` : ''}`
+        : `Kode: ${primary.asset?.code || '-'}${timeParts.length ? ` • ${timeParts.join(' | ')}` : ''}`,
+      renterName: primary.user?.name || '-',
+      dateFormatted: `${formatDate(primary.startDate, 'dd MMM yyyy')} - ${formatDate(primary.endDate, 'dd MMM yyyy')}`,
+      rawDate: new Date(primary.createdAt),
       totalCost: 0,
       payStatus: 'FREE',
-      finalStatus: l.status,
-      voucherUrl: `/api/loans/${l.id}/pdf`,
-      detailUrl: `/dashboard/loans/${l.id}`,
+      finalStatus: primary.status,
+      voucherUrl: `/api/loans/${primary.id}/pdf`,
+      detailUrl: `/dashboard/loans/${primary.id}`,
       // Rating
-      canRate: ['RETURNED', 'COMPLETED'].includes(l.status) && isBorrower,
-      existingRating: l.rating?.score || null,
-      loanId: l.id,
+      canRate: ['RETURNED', 'COMPLETED'].includes(primary.status) && isBorrower,
+      existingRating: primary.rating?.score || null,
+      loanId: primary.id,
       bookingId: undefined as string | undefined,
-      assetDisplayName: l.asset?.name || 'Aset Internal',
+      assetDisplayName: isMulti ? `Paket ${g.items.length} Aset` : (primary.asset?.name || 'Aset Internal'),
     });
   });
 

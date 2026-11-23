@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -421,13 +422,5 @@ export default function UserVerificationPage() {
         </div>
       </div>
     </div>
-  );
-}
-
-function Link({ href, children, ...props }: any) {
-  return (
-    <a href={href} {...props}>
-      {children}
-    </a>
   );
 }

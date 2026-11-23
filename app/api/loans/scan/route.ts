@@ -20,31 +20,114 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'QR Code token wajib diisi' }, { status: 400 });
     }
 
-    // Detect Room Booking Code (e.g. BK-2026-0007)
-    if (qrToken.startsWith('BK-') || qrToken.startsWith('BK')) {
+    const cleanToken = String(qrToken).trim().replace(/^#/, '');
+    const bookingUrlMatch = cleanToken.match(/\/bookings\/([A-Za-z0-9_-]+)/i);
+    const maybeBookingCode = (bookingUrlMatch ? bookingUrlMatch[1] : cleanToken).toUpperCase();
+
+    // Detect Room Booking Code (e.g. BK-2026-0007 or URL /bookings/BK-2026-0007)
+    if (maybeBookingCode.startsWith('BK-') || maybeBookingCode.startsWith('BK')) {
       const booking = await prisma.roomBooking.findUnique({
-        where: { bookingNumber: qrToken },
+        where: { bookingNumber: maybeBookingCode },
         include: { location: true, renter: true }
       });
 
       if (booking) {
+        const isCheckinReady = booking.bookingStatus === 'CONFIRMED';
+        const isCheckoutReady = ['ACTIVE', 'RETURN_REQUESTED'].includes(booking.bookingStatus);
+        if (!isCheckinReady && !isCheckoutReady) {
+          return NextResponse.json(
+            {
+              error: `Booking #${booking.bookingNumber} belum dapat di-Check-In / Check-Out karena berstatus "${booking.bookingStatus}". Hanya booking yang sudah disetujui & dikonfirmasi (CONFIRMED) atau sedang aktif (ACTIVE / RETURN_REQUESTED) yang dapat diproses.`,
+            },
+            { status: 400 }
+          );
+        }
         return NextResponse.json({
           type: 'ROOM_BOOKING',
           message: `E-Voucher Digital Ditemukan: ${booking.bookingNumber}`,
           booking,
-          nextAction: booking.bookingStatus === 'CONFIRMED' ? 'checkin' : (booking.bookingStatus === 'ACTIVE' ? 'checkout' : 'view'),
-          redirectUrl: booking.bookingStatus === 'CONFIRMED' 
-            ? `/dashboard/room-bookings/${booking.id}/checkin` 
-            : (booking.bookingStatus === 'ACTIVE' 
-              ? `/dashboard/room-bookings/${booking.id}/checkout` 
-              : `/dashboard/room-bookings/${booking.id}`)
+          nextAction: isCheckinReady ? 'checkin' : 'checkout',
+          redirectUrl: isCheckinReady
+            ? `/dashboard/room-bookings/${booking.id}/checkin`
+            : `/dashboard/room-bookings/${booking.id}/checkout`,
         });
       }
     }
 
-    // 1. Find asset by qrToken or code
+    // Detect Loan Group Code (e.g. GRP-2026-0001-ABC) -> arahkan ke Batch Handover
+    if (maybeBookingCode.startsWith('GRP-')) {
+      const groupLoans = await prisma.loan.findMany({
+        where: { groupCode: maybeBookingCode },
+        include: { asset: true, user: true },
+      });
+      if (groupLoans.length > 0) {
+        const approvedIds = groupLoans.filter((l) => l.status === 'APPROVED').map((l) => l.id);
+        const checkoutIds = groupLoans.filter((l) => ['ACTIVE', 'RETURN_REQUESTED'].includes(l.status)).map((l) => l.id);
+        if (approvedIds.length === 0 && checkoutIds.length === 0) {
+          return NextResponse.json(
+            {
+              error: `Paket peminjaman #${maybeBookingCode} belum dapat di-Check-In / Check-Out karena berstatus "${groupLoans[0].status}". Hanya peminjaman yang sudah disetujui penuh (APPROVED) atau sedang aktif (ACTIVE / RETURN_REQUESTED) yang dapat diproses.`,
+            },
+            { status: 400 }
+          );
+        }
+        const redirectUrl =
+          approvedIds.length > 0
+            ? `/dashboard/handovers/batch?ids=${approvedIds.join(',')}&type=CHECK_IN`
+            : `/dashboard/handovers/batch?ids=${checkoutIds.join(',')}&type=CHECK_OUT`;
+        return NextResponse.json({
+          type: 'ROOM_BOOKING',
+          message: `Paket Peminjaman Ditemukan: #${maybeBookingCode} (${groupLoans.length} Aset)`,
+          booking: {
+            bookingNumber: maybeBookingCode,
+            bookingStatus: groupLoans[0].status,
+            payStatus: 'FREE',
+            location: { name: `${groupLoans.length} Aset Paket`, building: '-' },
+            renter: { name: groupLoans[0].user?.name || '-' },
+          },
+          nextAction: approvedIds.length > 0 ? 'checkin' : 'checkout',
+          redirectUrl,
+        });
+      }
+    }
+
+    // Detect Loan Ticket Code (e.g. LN-2026-0001)
+    let matchedAssetFromLoanId: string | null = null;
+    let specificTicketLoan: any = null;
+    if (maybeBookingCode.startsWith('LN-')) {
+      const ticketLoan = await prisma.loan.findUnique({
+        where: { ticketNumber: maybeBookingCode },
+        include: { user: true },
+      });
+      if (!ticketLoan) {
+        return NextResponse.json({ error: `Tiket peminjaman #${maybeBookingCode} tidak ditemukan` }, { status: 404 });
+      }
+      if (!['APPROVED', 'ACTIVE', 'RETURN_REQUESTED'].includes(ticketLoan.status)) {
+        return NextResponse.json(
+          {
+            error: `Tiket peminjaman #${ticketLoan.ticketNumber} belum dapat di-Check-In / Check-Out karena berstatus "${ticketLoan.status}". Hanya peminjaman yang sudah disetujui penuh (APPROVED) atau sedang aktif (ACTIVE / RETURN_REQUESTED) yang dapat diproses.`,
+          },
+          { status: 400 }
+        );
+      }
+      matchedAssetFromLoanId = ticketLoan.assetId;
+      specificTicketLoan = ticketLoan;
+    }
+
+    // Extract Asset ID if QR is a URL like http://.../dashboard/assets/<id> or /assets/<id>
+    const assetUrlMatch = cleanToken.match(/\/assets\/([A-Za-z0-9_-]+)/i);
+    const extractedAssetId = matchedAssetFromLoanId || (assetUrlMatch ? assetUrlMatch[1] : cleanToken);
+
+    // 1. Find asset by id, qrToken, or code
     const asset = await prisma.asset.findFirst({
-      where: { OR: [{ qrToken }, { code: qrToken }] },
+      where: {
+        OR: [
+          { id: extractedAssetId },
+          { qrToken: cleanToken },
+          { code: cleanToken },
+          { code: maybeBookingCode },
+        ],
+      },
     });
 
     if (!asset) {
@@ -72,21 +155,27 @@ export async function POST(request: Request) {
       );
     }
 
-    // 3. Find active or approved loan for this asset
-    const activeLoan = await prisma.loan.findFirst({
-      where: {
-        assetId: asset.id,
-        status: { in: ['APPROVED', 'ACTIVE'] },
-      },
-      include: { user: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    // 3. Find active, return-requested, or approved loan for this asset
+    const activeLoan =
+      specificTicketLoan ||
+      (await prisma.loan.findFirst({
+        where: {
+          assetId: asset.id,
+          status: { in: ['APPROVED', 'ACTIVE', 'RETURN_REQUESTED'] },
+        },
+        include: { user: true },
+        orderBy: { createdAt: 'desc' },
+      }));
 
     const now = new Date();
 
     if (activeLoan) {
+      const loanQty = activeLoan.quantity || 1;
+
       // Perform CHECK-IN for Loan
       if (activeLoan.status === 'APPROVED') {
+        const newAvail = Math.max(0, asset.availableQty - loanQty);
+
         await prisma.loan.update({
           where: { id: activeLoan.id },
           data: {
@@ -97,7 +186,10 @@ export async function POST(request: Request) {
 
         await prisma.asset.update({
           where: { id: asset.id },
-          data: { status: 'BORROWED' },
+          data: {
+            availableQty: newAvail,
+            status: newAvail === 0 ? 'BORROWED' : 'AVAILABLE',
+          },
         });
 
         await prisma.checkInLog.create({
@@ -112,17 +204,18 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
           type: 'CHECK_IN',
-          message: `Check-In Berhasil! Aset ${asset.name} kini berstatus DIPINJAM oleh ${activeLoan.user.name}.`,
+          message: `Check-In Berhasil! ${loanQty} unit aset ${asset.name} kini berstatus DIPINJAM oleh ${activeLoan.user.name}. (Sisa stok tersedia: ${newAvail}/${asset.quantity})`,
           loan: activeLoan,
           asset,
         });
       }
 
-      // Perform CHECK-OUT for Loan
-      if (activeLoan.status === 'ACTIVE') {
+      // Perform CHECK-OUT for Loan (ACTIVE or RETURN_REQUESTED)
+      if (activeLoan.status === 'ACTIVE' || activeLoan.status === 'RETURN_REQUESTED') {
         const setting = await prisma.systemSetting.findUnique({ where: { id: 'default' } });
         const penaltyRate = setting?.dailyPenaltyRate || 50000;
         const penaltyFee = calculatePenaltyFee(activeLoan.endDate, now, penaltyRate);
+        const newAvail = Math.min(asset.quantity, asset.availableQty + loanQty);
 
         await prisma.loan.update({
           where: { id: activeLoan.id },
@@ -138,7 +231,11 @@ export async function POST(request: Request) {
 
         await prisma.asset.update({
           where: { id: asset.id },
-          data: { status: 'AVAILABLE', condition: condition || asset.condition },
+          data: {
+            availableQty: newAvail,
+            status: newAvail > 0 ? 'AVAILABLE' : asset.status,
+            condition: condition || asset.condition,
+          },
         });
 
         await prisma.checkInLog.create({
@@ -153,7 +250,7 @@ export async function POST(request: Request) {
 
         return NextResponse.json({
           type: 'CHECK_OUT',
-          message: `Pengembalian Berhasil! Status aset kembali TERSEDIA. ${penaltyFee > 0 ? `Keterlambatan terhitung Denda: Rp ${penaltyFee.toLocaleString('id-ID')}` : ''}`,
+          message: `Pengembalian Berhasil! ${loanQty} unit dikembalikan (Stok tersedia: ${newAvail}/${asset.quantity}). ${penaltyFee > 0 ? `Keterlambatan terhitung Denda: Rp ${penaltyFee.toLocaleString('id-ID')}` : ''}`,
           penaltyFee,
           loan: activeLoan,
           asset,
@@ -161,11 +258,12 @@ export async function POST(request: Request) {
       }
     }
 
-    // 4. Check for active RENTAL transaction if no Loan found
+    // 4. Check for approved/active RENTAL transaction if no Loan found
     const activeRental = await prisma.rental.findFirst({
       where: {
         assetId: asset.id,
-        payStatus: { in: ['PAID', 'DOWN_PAYMENT', 'UNPAID'] },
+        status: { in: ['APPROVED', 'ACTIVE'] },
+        payStatus: { in: ['PAID', 'DOWN_PAYMENT'] },
       },
       include: { renter: true },
       orderBy: { createdAt: 'desc' },

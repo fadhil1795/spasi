@@ -28,7 +28,12 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
                 brand: true,
                 serialNumber: true,
                 images: true,
-                category: { select: { name: true } },
+                category: {
+                  select: {
+                    name: true,
+                    parent: { select: { name: true } },
+                  },
+                },
                 location: { select: { name: true, building: true, room: true } },
               },
             },
@@ -56,6 +61,10 @@ export async function PATCH(request: Request, { params }: { params: { id: string
   try {
     const session = await getAuthSession();
     if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const userRole = (session.user as any)?.role || 'BORROWER';
+    if (!['SUPER_ADMIN', 'ADMIN', 'STAFF'].includes(userRole)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const body = await request.json();
     const { status, notes } = body;

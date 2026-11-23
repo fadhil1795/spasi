@@ -144,40 +144,72 @@ export default function AdminRoomBookingDetailPage() {
           </p>
         </div>
 
-        {/* Action Buttons (Strictly Restricted to Admin / Staff / Approver) */}
-        {!isBorrower && (
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            {booking.payStatus === 'PENDING_VERIFICATION' && (
-              <Button variant="primary" style={{ background: 'var(--color-success)', color: '#FFFFFF' }} isLoading={updating} onClick={() => handleUpdateStatus('CONFIRMED', 'PAID')}>
-                <CheckCircle size={16} /> Verifikasi Bayar &amp; Konfirmasi
-              </Button>
-            )}
+        {/* Action Buttons */}
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          {['PENDING', 'PENDING_L1', 'PENDING_L2'].includes(booking.bookingStatus) && (
+            <Link href={`/dashboard/room-bookings/new?editId=${booking.id}`} className="btn btn-secondary">
+              ✏️ Edit Pesanan
+            </Link>
+          )}
 
-            {booking.bookingStatus === 'APPROVED' && ((booking.totalAmount || 0) + (booking.depositAmount || 0)) === 0 && (
-              <Button variant="primary" style={{ background: 'var(--color-success)', color: '#FFFFFF' }} isLoading={updating} onClick={() => handleUpdateStatus('CONFIRMED', 'PAID')}>
-                <CheckCircle size={16} /> Konfirmasi Sesi Gratis
-              </Button>
-            )}
+          {['PENDING', 'PENDING_L1', 'PENDING_L2', 'APPROVED', 'CONFIRMED'].includes(booking.bookingStatus) && (
+            <Button
+              variant="ghost"
+              style={{ color: 'var(--color-danger)' }}
+              isLoading={updating}
+              onClick={async () => {
+                if (!confirm(`Batalkan pesanan #${booking.bookingNumber}?`)) return;
+                await handleUpdateStatus('CANCELLED');
+              }}
+            >
+              ❌ Batalkan Pesanan
+            </Button>
+          )}
 
-            {booking.bookingStatus === 'CONFIRMED' && (
-              <Link href={`/dashboard/room-bookings/${booking.id}/checkin`} className="btn btn-primary">
-                <LogIn size={16} /> Proses Check-In
-              </Link>
-            )}
+          {!isBorrower && booking.bookingStatus === 'PENDING' && (
+            <Button
+              variant="primary"
+              style={{ background: 'var(--color-success)', color: '#FFFFFF' }}
+              isLoading={updating}
+              onClick={() => {
+                const isFree = ((booking.totalAmount || 0) + (booking.depositAmount || 0)) === 0;
+                handleUpdateStatus(isFree ? 'CONFIRMED' : 'APPROVED');
+              }}
+            >
+              <CheckCircle size={16} /> Setujui Pengajuan
+            </Button>
+          )}
 
-            {booking.bookingStatus === 'ACTIVE' && (
-              <Link href={`/dashboard/room-bookings/${booking.id}/checkout`} className="btn btn-primary">
-                <LogOut size={16} /> Proses Check-Out &amp; Klaim
-              </Link>
-            )}
+          {!isBorrower && booking.payStatus === 'PENDING_VERIFICATION' && (
+            <Button variant="primary" style={{ background: 'var(--color-success)', color: '#FFFFFF' }} isLoading={updating} onClick={() => handleUpdateStatus('CONFIRMED', 'PAID')}>
+              <CheckCircle size={16} /> Verifikasi Bayar &amp; Konfirmasi
+            </Button>
+          )}
 
-            {booking.payStatus === 'DOWN_PAYMENT' && (
-              <Button variant="secondary" isLoading={updating} onClick={() => handleUpdateStatus(booking.bookingStatus, 'PAID')}>
-                <CreditCard size={16} /> Pelunasan Sisa DP
-              </Button>
-            )}
-          </div>
-        )}
+          {!isBorrower && booking.bookingStatus === 'APPROVED' && ((booking.totalAmount || 0) + (booking.depositAmount || 0)) === 0 && (
+            <Button variant="primary" style={{ background: 'var(--color-success)', color: '#FFFFFF' }} isLoading={updating} onClick={() => handleUpdateStatus('CONFIRMED', 'PAID')}>
+              <CheckCircle size={16} /> Konfirmasi Sesi Gratis
+            </Button>
+          )}
+
+          {!isBorrower && booking.bookingStatus === 'CONFIRMED' && (
+            <Link href={`/dashboard/room-bookings/${booking.id}/checkin`} className="btn btn-primary">
+              <LogIn size={16} /> Proses Check-In
+            </Link>
+          )}
+
+          {!isBorrower && ['ACTIVE', 'RETURN_REQUESTED'].includes(booking.bookingStatus) && (
+            <Link href={`/dashboard/room-bookings/${booking.id}/checkout`} className="btn btn-primary">
+              <LogOut size={16} /> Proses Check-Out &amp; Klaim
+            </Link>
+          )}
+
+          {!isBorrower && booking.payStatus === 'DOWN_PAYMENT' && (
+            <Button variant="secondary" isLoading={updating} onClick={() => handleUpdateStatus(booking.bookingStatus, 'PAID')}>
+              <CreditCard size={16} /> Pelunasan Sisa DP
+            </Button>
+          )}
+        </div>
       </div>
 
       <div className="booking-details-layout" style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: '1.5rem' }}>
@@ -191,12 +223,13 @@ export default function AdminRoomBookingDetailPage() {
 
             <div className="detail-info-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', fontSize: '0.9rem' }}>
               <div>
-                <span style={{ color: 'var(--color-muted)', display: 'block', fontSize: '0.78rem' }}>Nama Ruangan</span>
-                <strong>{booking.location?.name}</strong> ({booking.location?.code})
+                <span style={{ color: 'var(--color-muted)', display: 'block', fontSize: '0.78rem' }}>Ruangan / Paket Sarpras</span>
+                <strong>{booking.location?.name || 'Paket Peralatan Sarpras (Tanpa Ruangan)'}</strong>
+                {booking.location?.code ? ` (${booking.location.code})` : ''}
               </div>
               <div>
                 <span style={{ color: 'var(--color-muted)', display: 'block', fontSize: '0.78rem' }}>Gedung / Lokasi</span>
-                <span>{booking.location?.building}</span>
+                <span>{booking.location?.building || '-'}</span>
               </div>
               <div>
                 <span style={{ color: 'var(--color-muted)', display: 'block', fontSize: '0.78rem' }}>Tipe Sewa & Durasi</span>
@@ -206,8 +239,76 @@ export default function AdminRoomBookingDetailPage() {
                 <span style={{ color: 'var(--color-muted)', display: 'block', fontSize: '0.78rem' }}>Waktu Mulai - Selesai</span>
                 <span>{formatDate(booking.startTime, 'dd MMM yyyy HH:mm')} s.d {formatDate(booking.endTime, 'dd MMM yyyy HH:mm')}</span>
               </div>
+              <div>
+                <span style={{ color: 'var(--color-muted)', display: 'block', fontSize: '0.78rem' }}>Waktu Check-In Aktual</span>
+                <strong style={{ color: booking.checkInTime ? 'var(--color-info)' : 'var(--color-muted)' }}>
+                  {booking.checkInTime ? formatDate(booking.checkInTime, 'dd MMM yyyy, HH:mm:ss') : 'Belum Check-In'}
+                </strong>
+              </div>
+              <div>
+                <span style={{ color: 'var(--color-muted)', display: 'block', fontSize: '0.78rem' }}>Waktu Check-Out Aktual</span>
+                <strong style={{ color: booking.checkOutTime ? 'var(--color-success)' : 'var(--color-muted)' }}>
+                  {booking.checkOutTime ? formatDate(booking.checkOutTime, 'dd MMM yyyy, HH:mm:ss') : 'Belum Check-Out'}
+                </strong>
+              </div>
             </div>
+
+            {booking.notes && (
+              <div style={{ marginTop: '1rem', padding: '0.75rem 1rem', background: 'var(--color-surface2)', borderRadius: 'var(--radius-md)', fontSize: '0.84rem', whiteSpace: 'pre-line' }}>
+                <span style={{ color: 'var(--color-muted)', display: 'block', fontSize: '0.75rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+                  Catatan / Riwayat Keterangan
+                </span>
+                {booking.notes}
+              </div>
+            )}
           </Card>
+
+          {/* Card Riwayat Inspeksi Check-In & Check-Out */}
+          {Array.isArray(booking.inspections) && booking.inspections.length > 0 && (
+            <Card style={{ padding: '1.5rem' }}>
+              <h3 style={{ fontSize: '1.05rem', fontWeight: 700, marginBottom: '0.85rem' }}>
+                🔍 Riwayat Inspeksi Fisik (Check-In / Check-Out)
+              </h3>
+              <div style={{ overflowX: 'auto' }}>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-surface2)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-muted)' }}>
+                      <th style={{ padding: '0.55rem 0.7rem' }}>Tahap</th>
+                      <th style={{ padding: '0.55rem 0.7rem' }}>Fasilitas / Aset</th>
+                      <th style={{ padding: '0.55rem 0.7rem' }}>Kondisi</th>
+                      <th style={{ padding: '0.55rem 0.7rem' }}>Petugas &amp; Waktu</th>
+                      <th style={{ padding: '0.55rem 0.7rem' }}>Catatan</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {booking.inspections.map((ins: any) => (
+                      <tr key={ins.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                        <td style={{ padding: '0.55rem 0.7rem', fontWeight: 700 }}>
+                          {ins.type === 'CHECK_IN' ? 'Check-In' : 'Check-Out'}
+                        </td>
+                        <td style={{ padding: '0.55rem 0.7rem', fontWeight: 600 }}>{ins.assetName || '-'}</td>
+                        <td style={{ padding: '0.55rem 0.7rem' }}>
+                          {ins.isMissing ? (
+                            <span style={{ color: 'var(--color-danger)', fontWeight: 700 }}>HILANG</span>
+                          ) : ins.isDamaged ? (
+                            <span style={{ color: 'var(--color-danger)', fontWeight: 700 }}>{ins.conditionAfter || 'RUSAK'}</span>
+                          ) : (
+                            <span style={{ color: 'var(--color-success)', fontWeight: 700 }}>
+                              {ins.type === 'CHECK_IN' ? (ins.conditionBefore || 'Baik') : (ins.conditionAfter || 'Baik')}
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ padding: '0.55rem 0.7rem', color: 'var(--color-muted)', fontSize: '0.76rem' }}>
+                          {ins.inspectedBy || '-'} • {formatDate(ins.timestamp, 'dd MMM yyyy, HH:mm')}
+                        </td>
+                        <td style={{ padding: '0.55rem 0.7rem' }}>{ins.notes || '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
 
           {/* Card Penyewa & Dokumen Pendukung */}
           <Card style={{ padding: '1.5rem' }}>
@@ -315,14 +416,22 @@ export default function AdminRoomBookingDetailPage() {
 
                 {booking.paymentProofUrl ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-                    {/* Thumbnail / Image Preview */}
-                    <div style={{ position: 'relative', borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--color-border)', maxWidth: '320px', background: '#000' }}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
-                        src={booking.paymentProofUrl}
-                        alt="Struk Pembayaran"
-                        style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', display: 'block' }}
-                      />
+                    {/* Thumbnail / Image or PDF Preview */}
+                    <div style={{ position: 'relative', borderRadius: 'var(--radius-sm)', overflow: 'hidden', border: '1px solid var(--color-border)', maxWidth: '360px', background: '#000' }}>
+                      {/\.pdf(\?.*)?$/i.test(booking.paymentProofUrl) ? (
+                        <iframe
+                          src={booking.paymentProofUrl}
+                          title="Struk Pembayaran PDF"
+                          style={{ width: '100%', height: '220px', border: 'none', background: '#fff' }}
+                        />
+                      ) : (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={booking.paymentProofUrl}
+                          alt="Struk Pembayaran"
+                          style={{ width: '100%', maxHeight: '200px', objectFit: 'contain', display: 'block' }}
+                        />
+                      )}
                     </div>
 
                     <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap', alignItems: 'center' }}>

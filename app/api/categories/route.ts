@@ -7,8 +7,10 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   try {
     const categories = await prisma.category.findMany({
-      orderBy: { name: 'asc' },
+      orderBy: [{ parentId: 'asc' }, { name: 'asc' }],
       include: {
+        parent: { select: { id: true, code: true, name: true } },
+        children: { select: { id: true, code: true, name: true } },
         _count: {
           select: { assets: true },
         },
@@ -39,9 +41,15 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nama kategori wajib diisi' }, { status: 400 });
     }
 
+    const code = body.code
+      ? body.code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)
+      : body.name.replace(/[^A-Za-z]/g, '').slice(0, 4).toUpperCase();
+
     const newCategory = await prisma.category.create({
       data: {
-        name: body.name,
+        code,
+        name: body.name.trim(),
+        parentId: body.parentId || null,
         usefulLifeYears: body.usefulLifeYears ? parseInt(body.usefulLifeYears) : 5,
         depreciationRate: body.depreciationRate ? parseFloat(body.depreciationRate) : 0.2,
       },

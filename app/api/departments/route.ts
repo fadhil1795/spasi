@@ -33,7 +33,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { name, code } = body;
+    const { name, code, headName, description } = body;
 
     if (!name || !code) {
       return NextResponse.json({ error: 'Nama dan Kode unit/fakultas wajib diisi' }, { status: 400 });
@@ -51,6 +51,17 @@ export async function POST(request: Request) {
       data: {
         name: name.trim(),
         code: code.trim().toUpperCase(),
+        headName: headName ? headName.trim() : null,
+        description: description ? description.trim() : null,
+      },
+      include: {
+        _count: {
+          select: {
+            assets: true,
+            locations: true,
+            users: true,
+          },
+        },
       },
     });
 

@@ -12,15 +12,38 @@ export async function GET(_: Request, { params }: { params: { id: string } }) {
     const booking = await prisma.roomBooking.findUnique({
       where: { id: params.id },
       include: {
-        location: { include: { assets: { where: { isFixedToRoom: true }, include: { category: true } } } },
+        location: {
+          include: {
+            assets: { where: { isFixedToRoom: true }, include: { category: true } },
+            assetAllocations: { include: { asset: { include: { category: true } } } },
+          },
+        },
         renter: true,
-        addonAssets: { include: { asset: { select: { name: true, images: true, sessionRentRate: true } } } },
+        addonAssets: { include: { asset: { select: { id: true, code: true, name: true, images: true, sessionRentRate: true } } } },
         inspections: { include: { asset: { select: { name: true, images: true } } }, orderBy: { timestamp: 'asc' } },
       },
     });
 
     if (!booking) return NextResponse.json({ error: 'Booking tidak ditemukan' }, { status: 404 });
-    return NextResponse.json(booking);
+
+    // Gabungkan aset alokasi ruangan (RoomAssetAllocation) dengan aset tetap ruangan agar tampil saat check-in/out
+    const fixedAssets = booking.location?.assets || [];
+    const fixedIds = new Set(fixedAssets.map((a) => a.id));
+    const allocatedAssets = (booking.location?.assetAllocations || [])
+      .map((ra) => ra.asset)
+      .filter((a) => a && !fixedIds.has(a.id));
+
+    const enrichedBooking = {
+      ...booking,
+      location: booking.location
+        ? {
+            ...booking.location,
+            assets: [...fixedAssets, ...allocatedAssets],
+          }
+        : booking.location,
+    };
+
+    return NextResponse.json(enrichedBooking);
   } catch (error) {
     console.error(error);
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
@@ -38,7 +61,7 @@ export async function PATCH(request: Request, { params }: { params: { id: string
 
     // Strict Role Enforcement: Borrower cannot confirm booking or mark paid directly!
     if (userRole === 'BORROWER') {
-      if (bookingStatus && !['CANCELLED'].includes(bookingStatus)) {
+      if (bookingStatus && !['CANCELLED', 'RETURN_REQUESTED'].includes(bookingStatus)) {
         return NextResponse.json({ error: 'Pengguna peminjam tidak memiliki akses untuk mengonfirmasi booking' }, { status: 403 });
       }
       if (payStatus && payStatus === 'PAID') {
@@ -55,67 +78,228 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       return NextResponse.json({ error: 'Booking tidak ditemukan' }, { status: 404 });
     }
 
-    // SOP Langkah 2: Menolak wajib mengisi alasan
-    if (bookingStatus === 'CANCELLED' && existingBooking.bookingStatus !== 'CANCELLED') {
-      if (!notes || !notes.trim()) {
-        return NextResponse.json({ error: 'Alasan penolakan / pembatalan wajib diisi' }, { status: 400 });
+    if (userRole === 'BORROWER') {
+      const userEmail = session.user?.email;
+      const userPhone = String((session.user as any)?.phone || '').trim();
+      const isOwner =
+        (userEmail && existingBooking.renter?.email === userEmail) ||
+        (userPhone && existingBooking.renter?.phone === userPhone);
+      if (!isOwner) {
+        return NextResponse.json({ error: 'Anda tidak memiliki izin mengubah booking ini' }, { status: 403 });
+      }
+      if (bookingStatus === 'RETURN_REQUESTED' && existingBooking.bookingStatus !== 'ACTIVE') {
+        return NextResponse.json({ error: 'Hanya booking berstatus ACTIVE yang dapat diajukan selesai pemakaian' }, { status: 400 });
+      }
+      if (
+        bookingStatus === 'CANCELLED' &&
+        !['PENDING', 'PENDING_L1', 'PENDING_L2', 'APPROVED', 'CONFIRMED'].includes(existingBooking.bookingStatus)
+      ) {
+        return NextResponse.json({ error: 'Pesanan yang sudah berjalan/selesai tidak dapat dibatalkan' }, { status: 400 });
+      }
+      const isEditingDetails =
+        body.locationId !== undefined ||
+        body.startTime !== undefined ||
+        body.endTime !== undefined ||
+        body.rentalType !== undefined ||
+        body.addonAssets !== undefined ||
+        body.supportingDocUrl !== undefined ||
+        body.activityType !== undefined;
+      if (isEditingDetails && !['PENDING', 'PENDING_L1', 'PENDING_L2'].includes(existingBooking.bookingStatus)) {
+        return NextResponse.json(
+          { error: 'Pesanan hanya dapat diedit selama belum disetujui (masih berstatus MENUNGGU)' },
+          { status: 400 }
+        );
       }
     }
 
+    const resolvedNotes =
+      bookingStatus === 'CANCELLED' && (!notes || !String(notes).trim())
+        ? 'Dibatalkan oleh pengguna'
+        : notes;
+
     const wasAlreadyPaid = existingBooking.payStatus === 'PAID';
+
+    const targetLocationId =
+      body.locationId !== undefined ? (body.locationId || null) : existingBooking.locationId;
+    const targetRentalType = body.rentalType || existingBooking.rentalType;
 
     const updatedData: any = {
       ...(bookingStatus && { bookingStatus }),
       ...(payStatus && { payStatus }),
       ...(payMethod && { payMethod }),
+      ...(body.paymentScheme && { paymentScheme: body.paymentScheme }),
+      ...(body.activityType && { activityType: body.activityType }),
+      ...(body.supportingDocUrl !== undefined && { supportingDocUrl: body.supportingDocUrl }),
+      ...(body.rentalType && { rentalType: body.rentalType }),
+      ...(body.locationId !== undefined && { locationId: targetLocationId }),
       ...(paymentProofUrl !== undefined && { paymentProofUrl }),
-      ...(notes !== undefined && { notes }),
+      ...(resolvedNotes !== undefined && { notes: resolvedNotes }),
     };
 
-    if (body.startTime || body.endTime) {
-      const newStart = body.startTime ? new Date(body.startTime) : existingBooking.startTime;
-      const newEnd = body.endTime ? new Date(body.endTime) : existingBooking.endTime;
+    const newStart = body.startTime ? new Date(body.startTime) : existingBooking.startTime;
+    const newEnd = body.endTime ? new Date(body.endTime) : existingBooking.endTime;
 
+    if (body.startTime || body.endTime || body.locationId !== undefined || body.rentalType) {
       if (newEnd <= newStart) {
         return NextResponse.json({ error: 'Waktu selesai harus setelah waktu mulai' }, { status: 400 });
       }
 
-      // Check anti-double booking, exclude this booking ID
-      const conflict = await prisma.roomBooking.findFirst({
-        where: {
-          id: { not: params.id },
-          locationId: existingBooking.locationId,
-          bookingStatus: { in: ['CONFIRMED', 'ACTIVE'] },
-          OR: [{ startTime: { lte: newEnd }, endTime: { gte: newStart } }],
-        },
-      });
+      if (targetLocationId) {
+        const conflict = await prisma.roomBooking.findFirst({
+          where: {
+            id: { not: params.id },
+            locationId: targetLocationId,
+            bookingStatus: { in: ['CONFIRMED', 'APPROVED', 'ACTIVE', 'RETURN_REQUESTED'] },
+            AND: [{ startTime: { lt: newEnd } }, { endTime: { gt: newStart } }],
+          },
+        });
 
-      if (conflict) {
-        return NextResponse.json({ error: 'Slot waktu baru sudah dipesan oleh penyewa lain' }, { status: 409 });
+        if (conflict) {
+          return NextResponse.json({ error: 'Slot waktu baru sudah dipesan oleh penyewa lain' }, { status: 409 });
+        }
       }
 
       updatedData.startTime = newStart;
       updatedData.endTime = newEnd;
 
-      // Recalculate duration and subtotal
       const diffMs = newEnd.getTime() - newStart.getTime();
       const diffHours = diffMs / (1000 * 60 * 60);
       updatedData.durationHours = parseFloat(diffHours.toFixed(2));
-      
-      // Recalculate roomSubtotal based on rate type
-      if (existingBooking.rentalType === 'DAILY') {
-        const diffDays = Math.max(1, Math.ceil(diffHours / 24));
-        updatedData.roomSubtotal = diffDays * existingBooking.roomRate;
-      } else {
-        updatedData.roomSubtotal = updatedData.durationHours * existingBooking.roomRate;
+
+      let activeRoomRate = existingBooking.roomRate;
+      if (body.locationId !== undefined || body.rentalType) {
+        if (!targetLocationId) {
+          activeRoomRate = 0;
+        } else {
+          const targetRoom = await prisma.location.findUnique({ where: { id: targetLocationId } });
+          if (targetRoom) {
+            const isFree =
+              existingBooking.renterCategory === 'EXTERNAL_PINJAM' ||
+              (existingBooking.renterCategory === 'MAHASISWA' && targetRoom.isLoanable);
+            activeRoomRate = isFree
+              ? 0
+              : targetRentalType === 'DAILY'
+              ? targetRoom.pricePerDay || (targetRoom.pricePerHour || 0) * 8
+              : targetRoom.pricePerHour || 0;
+          }
+        }
+        updatedData.roomRate = activeRoomRate;
       }
-      updatedData.totalAmount = updatedData.roomSubtotal + existingBooking.addonSubtotal;
+
+      if (targetRentalType === 'DAILY') {
+        const diffDays = Math.max(1, Math.ceil(diffHours / 24));
+        updatedData.roomSubtotal = diffDays * activeRoomRate;
+      } else {
+        updatedData.roomSubtotal = updatedData.durationHours * activeRoomRate;
+      }
     }
 
-    const updated = await prisma.roomBooking.update({
-      where: { id: params.id },
-      data: updatedData,
-      include: { location: true, renter: true, addonAssets: true },
+    let nextAddonSubtotal = existingBooking.addonSubtotal;
+    if (Array.isArray(body.addonAssets)) {
+      const isPaidMode =
+        existingBooking.renterCategory === 'EXTERNAL_SEWA' ||
+        (existingBooking.renterCategory === 'MAHASISWA' && existingBooking.location && !existingBooking.location.isLoanable);
+      nextAddonSubtotal = isPaidMode
+        ? body.addonAssets.reduce(
+            (sum: number, a: any) => sum + (parseFloat(a.ratePerSession || 0) * parseInt(a.quantity || 1)),
+            0
+          )
+        : 0;
+      updatedData.addonSubtotal = nextAddonSubtotal;
+    }
+
+    if (updatedData.roomSubtotal !== undefined || updatedData.addonSubtotal !== undefined) {
+      const baseRoomSub = updatedData.roomSubtotal !== undefined ? updatedData.roomSubtotal : existingBooking.roomSubtotal;
+      updatedData.totalAmount = baseRoomSub + nextAddonSubtotal;
+    }
+
+    // Cek ulang bentrok jadwal saat admin menyetujui / mengonfirmasi booking
+    if (bookingStatus && ['APPROVED', 'CONFIRMED'].includes(bookingStatus) && targetLocationId) {
+      const approvalConflict = await prisma.roomBooking.findFirst({
+        where: {
+          id: { not: params.id },
+          locationId: targetLocationId,
+          bookingStatus: { in: ['CONFIRMED', 'APPROVED', 'ACTIVE', 'RETURN_REQUESTED'] },
+          AND: [{ startTime: { lt: newStart } }, { endTime: { gt: newEnd } }],
+        },
+      });
+      if (approvalConflict) {
+        return NextResponse.json(
+          { error: `Slot ruangan sudah terpakai oleh booking #${approvalConflict.bookingNumber}` },
+          { status: 409 }
+        );
+      }
+    }
+
+    // Jika sesi gratis dikonfirmasi, pastikan payStatus = PAID
+    const finalTotalWithDeposit =
+      (updatedData.totalAmount !== undefined ? updatedData.totalAmount : existingBooking.totalAmount) +
+      existingBooking.depositAmount;
+    if (bookingStatus === 'CONFIRMED' && finalTotalWithDeposit === 0 && !payStatus) {
+      updatedData.payStatus = 'PAID';
+    }
+
+    // Append notes jika bukan edit detail draft
+    if (resolvedNotes !== undefined && !(body.startTime || body.endTime || body.addonAssets)) {
+      updatedData.notes = existingBooking.notes
+        ? `${resolvedNotes}\n${existingBooking.notes}`
+        : resolvedNotes;
+    }
+
+    // Hitung incremental paidAmount saat verifikasi pembayaran (DP atau PAID)
+    const prevPaidAmount = existingBooking.paidAmount || 0;
+    let deltaPaidToRecord = 0;
+    const effectivePayStatus = updatedData.payStatus || payStatus;
+    if (effectivePayStatus === 'DOWN_PAYMENT' && existingBooking.payStatus !== 'DOWN_PAYMENT') {
+      const dpTarget = Math.ceil(finalTotalWithDeposit * 0.5);
+      if (dpTarget > prevPaidAmount) {
+        updatedData.paidAmount = dpTarget;
+        deltaPaidToRecord = dpTarget - prevPaidAmount;
+      }
+    } else if (effectivePayStatus === 'PAID' && !wasAlreadyPaid && !['REFUNDED', 'CLAIMED'].includes(existingBooking.payStatus)) {
+      if (finalTotalWithDeposit > prevPaidAmount) {
+        updatedData.paidAmount = finalTotalWithDeposit;
+        deltaPaidToRecord = finalTotalWithDeposit - prevPaidAmount;
+      }
+    }
+
+    const updated = await prisma.$transaction(async (tx) => {
+      if (Array.isArray(body.addonAssets)) {
+        await tx.bookingAddonAsset.deleteMany({ where: { bookingId: params.id } });
+        if (body.addonAssets.length > 0) {
+          await tx.bookingAddonAsset.createMany({
+            data: body.addonAssets.map((a: any) => ({
+              bookingId: params.id,
+              assetId: a.assetId,
+              assetName: a.assetName || '',
+              quantity: parseInt(a.quantity || 1),
+              ratePerSession: parseFloat(a.ratePerSession || 0),
+              subtotal: parseFloat(a.ratePerSession || 0) * parseInt(a.quantity || 1),
+            })),
+          });
+        }
+      }
+
+      const saved = await tx.roomBooking.update({
+        where: { id: params.id },
+        data: updatedData,
+        include: { location: true, renter: true, addonAssets: true },
+      });
+
+      if (deltaPaidToRecord > 0) {
+        const facilityLabel = saved.location?.name || 'Paket Peralatan Sarpras';
+        await tx.cashTransaction.create({
+          data: {
+            type: 'IN',
+            category: 'RENTAL',
+            amount: deltaPaidToRecord,
+            referenceId: saved.bookingNumber,
+            description: `Penerimaan Pembayaran (${effectivePayStatus}) ${facilityLabel} (#${saved.bookingNumber}) - Penyewa: ${saved.renter.name}`,
+          },
+        });
+      }
+
+      return saved;
     });
 
     // Write Audit Log
@@ -165,19 +349,21 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       let notifMessage = '';
       let notifType: 'INFO' | 'SUCCESS' | 'WARNING' | 'DANGER' = 'INFO';
 
+      const facilityLabel = updated.location?.name || 'Paket Peralatan Sarpras';
+
       if (bookingStatus === 'CONFIRMED' && existingBooking.bookingStatus !== 'CONFIRMED') {
-        notifTitle = 'Reservasi Ruangan Dikonfirmasi! 🎉';
-        notifMessage = `Halo ${updated.renter.name},\nReservasi ruangan "${updated.location.name}" dengan kode booking ${updated.bookingNumber} telah DIKONFIRMASI oleh admin. Silakan tunjukkan E-Voucher Anda saat melakukan Check-In.`;
+        notifTitle = 'Reservasi Sarpras Dikonfirmasi! 🎉';
+        notifMessage = `Halo ${updated.renter.name},\nReservasi "${facilityLabel}" dengan kode booking ${updated.bookingNumber} telah DIKONFIRMASI oleh admin. Silakan tunjukkan E-Voucher Anda saat melakukan Check-In.`;
         notifType = 'SUCCESS';
       } else if (bookingStatus === 'CANCELLED' && existingBooking.bookingStatus !== 'CANCELLED') {
-        notifTitle = 'Reservasi Ruangan Dibatalkan ❌';
-        notifMessage = `Halo ${updated.renter.name},\nReservasi ruangan "${updated.location.name}" dengan kode booking ${updated.bookingNumber} telah DIBATALKAN.\nCatatan admin: "${notes || 'Tidak ada catatan'}"`;
+        notifTitle = 'Reservasi Sarpras Dibatalkan ❌';
+        notifMessage = `Halo ${updated.renter.name},\nReservasi "${facilityLabel}" dengan kode booking ${updated.bookingNumber} telah DIBATALKAN.\nCatatan admin: "${notes || 'Tidak ada catatan'}"`;
         notifType = 'DANGER';
       }
 
       if (payStatus === 'PAID' && !wasAlreadyPaid) {
         notifTitle = 'Pembayaran Terverifikasi (Lunas) ✅';
-        notifMessage = `Halo ${updated.renter.name},\nPembayaran untuk kode booking ${updated.bookingNumber} (Ruang ${updated.location.name}) sebesar Rp ${updated.totalAmount.toLocaleString('id-ID')} telah berhasil diverifikasi dan dinyatakan LUNAS.`;
+        notifMessage = `Halo ${updated.renter.name},\nPembayaran untuk kode booking ${updated.bookingNumber} (${facilityLabel}) sebesar Rp ${updated.totalAmount.toLocaleString('id-ID')} telah berhasil diverifikasi dan dinyatakan LUNAS.`;
         notifType = 'SUCCESS';
       }
 
@@ -198,42 +384,16 @@ export async function PATCH(request: Request, { params }: { params: { id: string
       }
     }
 
-    // Kirim voucher PDF & catat buku kas jika diverifikasi LUNAS
+    // Kirim voucher PDF jika diverifikasi LUNAS
     if (payStatus === 'PAID' && !wasAlreadyPaid) {
-      // Catat Buku Kas Otomatis (CashTransaction)
-      try {
-        if (updated.totalAmount > 0) {
-          await prisma.cashTransaction.create({
-            data: {
-              type: 'IN',
-              category: 'RENTAL',
-              amount: updated.totalAmount,
-              referenceId: updated.bookingNumber,
-              description: `Penerimaan Pembayaran Sewa Ruang ${updated.location.name} (#${updated.bookingNumber}) - Penyewa: ${updated.renter.name}`,
-            },
-          });
-        }
-        if (updated.depositAmount > 0) {
-          await prisma.cashTransaction.create({
-            data: {
-              type: 'IN',
-              category: 'DEPOSIT',
-              amount: updated.depositAmount,
-              referenceId: updated.bookingNumber,
-              description: `Penerimaan Uang Jaminan / Deposit Sewa Ruang ${updated.location.name} (#${updated.bookingNumber})`,
-            },
-          });
-        }
-      } catch (cashErr) {
-        console.error('Error recording automatic cash transaction:', cashErr);
-      }
+      const facilityLabel = updated.location?.name || 'Paket Peralatan Sarpras';
 
       const voucherData = {
         to: updated.renter.email,
         phone: updated.renter.phone,
         bookingNumber: updated.bookingNumber,
         renterName: updated.renter.name,
-        assetNames: `Ruang ${updated.location.name}`,
+        assetNames: facilityLabel,
         totalAmount: updated.totalAmount,
         startDate: updated.startTime.toISOString().split('T')[0],
         endDate: updated.endTime.toISOString().split('T')[0],

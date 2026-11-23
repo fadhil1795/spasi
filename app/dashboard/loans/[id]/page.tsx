@@ -51,16 +51,33 @@ export default function LoanDetailPage() {
   const handleApprovalAction = async () => {
     try {
       setSubmitting(true);
-      const res = await fetch(`/api/loans/${id}/approve`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: actionType, notes }),
-      });
+      const groupItems: any[] = Array.isArray(loan?.groupLoans) ? loan.groupLoans : [];
+      const targetIds =
+        groupItems.length > 1
+          ? groupItems.filter((g) => g.status === loan.status).map((g) => g.id)
+          : [String(id)];
+
+      const res =
+        targetIds.length > 1
+          ? await fetch('/api/loans/group-action', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ loanIds: targetIds, action: actionType, notes }),
+            })
+          : await fetch(`/api/loans/${targetIds[0]}/approve`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ action: actionType, notes }),
+            });
 
       if (res.ok) {
         showToast(
           actionType === 'APPROVE'
-            ? 'Pengajuan berhasil disetujui!'
+            ? targetIds.length > 1
+              ? `${targetIds.length} item pengajuan berhasil disetujui!`
+              : 'Pengajuan berhasil disetujui!'
+            : targetIds.length > 1
+            ? `${targetIds.length} item pengajuan telah ditolak.`
             : 'Pengajuan telah ditolak.',
           actionType === 'APPROVE' ? 'success' : 'warning'
         );
@@ -85,8 +102,8 @@ export default function LoanDetailPage() {
     return <p style={{ padding: '2rem' }}>Data peminjaman tidak ditemukan.</p>;
   }
 
-  const canApproveL1 = currentUserRole === 'APPROVER' || currentUserRole === 'SUPER_ADMIN';
-  const canApproveL2 = currentUserRole === 'ADMIN' || currentUserRole === 'SUPER_ADMIN';
+  const canApproveL1 = ['APPROVER', 'ADMIN', 'SUPER_ADMIN'].includes(currentUserRole);
+  const canApproveL2 = ['ADMIN', 'SUPER_ADMIN'].includes(currentUserRole);
 
   const showApprovalButton =
     (loan.status === 'PENDING_L1' && canApproveL1) ||
@@ -112,15 +129,70 @@ export default function LoanDetailPage() {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
         <div>
           <span style={{ fontFamily: 'monospace', fontSize: '0.9rem', color: 'var(--color-primary-light)', fontWeight: 700 }}>
-            {loan.ticketNumber}
+            {loan.groupCode || loan.ticketNumber}
           </span>
           <h1 style={{ fontSize: '1.8rem', fontWeight: 800, lineHeight: 1.2 }}>
-            Peminjaman Aset: {loan.asset?.name}
+            {loan.groupLoans && loan.groupLoans.length > 1
+              ? `Paket Peminjaman (${loan.groupLoans.length} Aset)`
+              : `Peminjaman Aset: ${loan.asset?.name}`}
           </h1>
         </div>
 
-        <Badge status={loan.status} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <a
+            href={`/api/loans/${loan.id}/pdf`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary btn-sm"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+          >
+            📄 {loan.groupLoans && loan.groupLoans.length > 1 ? 'Cetak BAST Paket' : 'Cetak BAST'}
+          </a>
+          <Badge status={loan.status} />
+        </div>
       </div>
+
+      {/* Daftar Aset Paket (jika lebih dari 1 aset) */}
+      {loan.groupLoans && loan.groupLoans.length > 1 && (
+        <Card style={{ padding: '1.25rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>
+            Daftar Aset dalam Paket Ini ({loan.groupLoans.length} Jenis Aset)
+          </h3>
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ background: 'var(--color-surface2)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-muted)' }}>
+                  <th style={{ padding: '0.6rem 0.75rem' }}>No</th>
+                  <th style={{ padding: '0.6rem 0.75rem' }}>Kode Tiket</th>
+                  <th style={{ padding: '0.6rem 0.75rem' }}>Aset / Barang</th>
+                  <th style={{ padding: '0.6rem 0.75rem' }}>Jumlah</th>
+                  <th style={{ padding: '0.6rem 0.75rem' }}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loan.groupLoans.map((item: any, idx: number) => (
+                  <tr key={item.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <td style={{ padding: '0.6rem 0.75rem' }}>{idx + 1}</td>
+                    <td style={{ padding: '0.6rem 0.75rem', fontFamily: 'monospace', fontWeight: 700 }}>
+                      #{item.ticketNumber}
+                    </td>
+                    <td style={{ padding: '0.6rem 0.75rem' }}>
+                      <div style={{ fontWeight: 700 }}>{item.asset?.name || '-'}</div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
+                        {item.asset?.code || '-'} • {item.asset?.location?.name || 'Lokasi -'}
+                      </div>
+                    </td>
+                    <td style={{ padding: '0.6rem 0.75rem', fontWeight: 700 }}>{item.quantity || 1} unit</td>
+                    <td style={{ padding: '0.6rem 0.75rem' }}>
+                      <Badge status={item.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       {/* Main Details Grid */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem' }}>
@@ -143,6 +215,21 @@ export default function LoanDetailPage() {
             <div>
               <span style={{ fontSize: '0.78rem', color: 'var(--color-muted)', display: 'block' }}>Tanggal Selesai</span>
               <span style={{ fontWeight: 600 }}>{formatDate(loan.endDate)}</span>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '0.75rem', background: 'var(--color-surface2)', borderRadius: 'var(--radius-md)' }}>
+            <div>
+              <span style={{ fontSize: '0.76rem', color: 'var(--color-muted)', display: 'block' }}>Waktu Pengambilan (Check-In)</span>
+              <span style={{ fontWeight: 700, fontSize: '0.86rem', color: loan.checkInTime ? 'var(--color-info)' : 'var(--color-muted)' }}>
+                {loan.checkInTime ? formatDate(loan.checkInTime, 'dd MMMM yyyy, HH:mm:ss') : 'Belum diambil'}
+              </span>
+            </div>
+            <div>
+              <span style={{ fontSize: '0.76rem', color: 'var(--color-muted)', display: 'block' }}>Waktu Pengembalian (Check-Out)</span>
+              <span style={{ fontWeight: 700, fontSize: '0.86rem', color: loan.checkOutTime ? 'var(--color-success)' : 'var(--color-muted)' }}>
+                {loan.checkOutTime ? formatDate(loan.checkOutTime, 'dd MMMM yyyy, HH:mm:ss') : 'Belum dikembalikan'}
+              </span>
             </div>
           </div>
 
@@ -222,9 +309,25 @@ export default function LoanDetailPage() {
                 <Button
                   variant="secondary"
                   onClick={async () => {
-                    if (!confirm('Ajukan pengembalian aset ini sekarang?')) return;
+                    const groupItems: any[] = Array.isArray(loan?.groupLoans) ? loan.groupLoans : [];
+                    const activeIds =
+                      groupItems.length > 1
+                        ? groupItems.filter((g) => g.status === 'ACTIVE').map((g) => g.id)
+                        : [loan.id];
+                    const msg =
+                      activeIds.length > 1
+                        ? `Ajukan pengembalian untuk ${activeIds.length} aset dalam paket ini?`
+                        : 'Ajukan pengembalian aset ini sekarang?';
+                    if (!confirm(msg)) return;
                     try {
-                      const res = await fetch(`/api/loans/${loan.id}/request-return`, { method: 'POST' });
+                      const res =
+                        activeIds.length > 1
+                          ? await fetch('/api/loans/group-action', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ loanIds: activeIds, action: 'REQUEST_RETURN' }),
+                            })
+                          : await fetch(`/api/loans/${loan.id}/request-return`, { method: 'POST' });
                       if (res.ok) {
                         showToast('Pengajuan pengembalian berhasil dikirim! Serahkan aset ke petugas.', 'success');
                         fetchLoanDetail();
@@ -235,7 +338,7 @@ export default function LoanDetailPage() {
                     } catch { showToast('Terjadi kesalahan koneksi', 'error'); }
                   }}
                 >
-                  📦 Ajukan Pengembalian Aset
+                  📦 Ajukan Pengembalian {loan.groupLoans && loan.groupLoans.length > 1 ? 'Paket' : 'Aset'}
                 </Button>
               )}
 

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { PublicNavbar } from '@/components/public/Navbar';
 import { Badge } from '@/components/ui/Badge';
 import { formatCurrency } from '@/lib/utils';
+import { parseFacilities } from '@/lib/roomConstants';
 import { MapPin, Users, Maximize, Search, Building2, Wifi, Tv, MonitorPlay, Speaker } from 'lucide-react';
 
 export default function PublicRoomsPage() {
@@ -90,7 +91,7 @@ export default function PublicRoomsPage() {
           <div className="catalog-grid">
             {filtered.map(room => {
               const photos = room.photos ? JSON.parse(room.photos) : [];
-              const facilities = room.facilities ? JSON.parse(room.facilities) : [];
+              const facilities = parseFacilities(room.facilities);
               const photoUrl = photos.length > 0 ? photos[0] : null;
 
               return (
@@ -150,9 +151,9 @@ export default function PublicRoomsPage() {
 
                       {facilities.length > 0 && (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem', marginBottom: '1.25rem' }}>
-                          {facilities.slice(0, 3).map((f: string, i: number) => (
+                          {facilities.slice(0, 3).map((f, i: number) => (
                             <span key={i} style={{ background: 'var(--color-surface2)', padding: '0.2rem 0.6rem', borderRadius: '4px', fontSize: '0.75rem', fontWeight: 500, color: 'var(--color-muted)' }}>
-                              {f}
+                              {f.name}{f.qty > 1 ? ` (${f.qty})` : ''}
                             </span>
                           ))}
                           {facilities.length > 3 && (

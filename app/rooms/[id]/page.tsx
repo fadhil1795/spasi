@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { useCart } from '@/components/public/CartContext';
 import { formatCurrency } from '@/lib/utils';
+import { parseFacilities } from '@/lib/roomConstants';
 import { MapPin, Users, Maximize, ArrowLeft, CheckCircle2, ShieldCheck, ShoppingBag, ChevronRight, Check } from 'lucide-react';
 
 export default function PublicRoomDetailPage() {
@@ -207,7 +208,7 @@ export default function PublicRoomDetailPage() {
   const photos = room.photos ? JSON.parse(room.photos) : [];
   if (photos.length === 0) photos.push('https://images.unsplash.com/photo-1497366216548-37526070297c?w=600&auto=format&fit=crop');
   const currentImg = selectedImg || photos[0];
-  const facilities = room.facilities ? JSON.parse(room.facilities) : [];
+  const facilities = parseFacilities(room.facilities);
   const fixedAssets = room.assets?.filter((a: any) => a.isFixedToRoom) || [];
 
   return (
@@ -302,9 +303,9 @@ export default function PublicRoomDetailPage() {
               <div>
                 <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1rem' }}>Sudah termasuk (Fasilitas)</h3>
                 <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {facilities.map((f: string, i: number) => (
+                  {facilities.map((f, i: number) => (
                     <li key={i} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text)' }}>
-                      <CheckCircle2 size={18} style={{ color: 'var(--color-success)' }} /> {f}
+                      <CheckCircle2 size={18} style={{ color: 'var(--color-success)' }} /> {f.name}{f.qty > 1 ? ` (${f.qty})` : ''}
                     </li>
                   ))}
                   {fixedAssets.map((asset: any) => (

@@ -12,20 +12,53 @@ datasource db {
 
 
 model Department {
-  id        String   @id @default(cuid())
-  name      String
-  code      String   @unique
-  headId    String?
-  users     User[]
-  assets    Asset[]
-  locations Location[]
+  id          String   @id @default(cuid())
+  name        String
+  code        String   @unique
+  headId      String?
+  headName    String?
+  description String?  @db.Text
+  users       User[]
+  assets      Asset[]
+  locations   Location[]
   procurementRequests ProcurementRequest[]
+}
+
+model Building {
+  id          String     @id @default(cuid())
+  code        String     @unique              // Kode gedung: GKB, REK, LAB, AUD
+  name        String                          // Nama resmi gedung: Gedung Kuliah Bersama
+  totalFloors Int        @default(1)
+  campusArea  String?                         // Area kampus: Kampus Utama, Kampus Timur
+  address     String?
+  description String?    @db.Text
+  locations   Location[]
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+}
+
+model RoomFacilityMaster {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  category  String?  // Elektronik, Furniture, Jaringan, Keamanan, Sanitasi
+  createdAt DateTime @default(now())
+}
+
+model RoomTypeMaster {
+  id        String   @id @default(cuid())
+  code      String   @unique
+  name      String   @unique
+  color     String   @default("#3b82f6")
+  createdAt DateTime @default(now())
 }
 
 model Location {
   id                 String                  @id @default(cuid())
-  code               String?                 @unique              // Kode ruangan: R-201, STUDIO-A
+  code               String?                 @unique              // Kode ruangan: GKB-201, STUDIO-A
   name               String                  @default("")         // Nama resmi ruangan
+  roomType           String                  @default("CLASSROOM") // CLASSROOM, LABORATORY, AUDITORIUM, MEETING_ROOM, OFFICE, STUDIO, STORAGE, OTHER
+  buildingId         String?
+  buildingRef        Building?               @relation(fields: [buildingId], references: [id], onDelete: SetNull)
   building           String
   floor              String?
   room               String?
@@ -42,9 +75,14 @@ model Location {
   status             String                  @default("AVAILABLE") // AVAILABLE, RENTED, MAINTENANCE, INACTIVE
   facilities         String                  @db.Text // JSON string array of fasilitas ruangan
   photos             String                  @db.Text // JSON string array of foto ruangan
+  picId              String?                 // ID User PIC / Kepala Ruangan
+  picName            String?                 // Nama Penanggung Jawab / Laboran
+  picPhone           String?                 // No. Telepon / WA PIC
+  qrToken            String?                 @unique         // Token QR Pintu Ruangan
   departmentId       String?
   department         Department?             @relation(fields: [departmentId], references: [id])
   assets             Asset[]
+  assetAllocations   RoomAssetAllocation[]
   roomBookings       RoomBooking[]
   availabilityBlocks RoomAvailabilityBlock[]
   maintenance        Maintenance[]
@@ -54,9 +92,13 @@ model Location {
 }
 
 model Category {
-  id               String   @id @default(cuid())
-  name             String   @unique
-  depreciationRate Float?   // % per tahun
+  id               String      @id @default(cuid())
+  code             String?     @unique
+  name             String      @unique
+  parentId         String?
+  parent           Category?   @relation("CategoryHierarchy", fields: [parentId], references: [id], onDelete: Cascade)
+  children         Category[]  @relation("CategoryHierarchy")
+  depreciationRate Float?      // % per tahun
   usefulLifeYears  Int?
   assets           Asset[]
   checklistTemplates ChecklistTemplate[]
@@ -102,6 +144,7 @@ model Asset {
   salvageValue       Float?              // Nilai sisa aset saat penghapusan (Rp)
   disposalReason     String?             @db.Text // Alasan pemutihan/penghapusan
   disposalDocUrl     String?             @db.Text // Berita Acara Penghapusan PDF/Dokumen
+  picName            String?             // Nama Penanggung Jawab Aset
   loans              Loan[]
   rentals            Rental[]
   maintenance        Maintenance[]
@@ -110,8 +153,23 @@ model Asset {
   bookingAddons      BookingAddonAsset[]
   bookingInspections BookingInspection[]
   stockOpnameItems   StockOpnameItem[]
+  roomAllocations    RoomAssetAllocation[]
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @default(now()) @updatedAt
+}
+
+model RoomAssetAllocation {
+  id         String   @id @default(cuid())
+  locationId String
+  location   Location @relation(fields: [locationId], references: [id], onDelete: Cascade)
+  assetId    String
+  asset      Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  quantity   Int      @default(1)
+  notes      String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([locationId, assetId])
 }
 
 model User {
@@ -157,6 +215,7 @@ model User {
 model Loan {
   id           String       @id @default(cuid())
   ticketNumber String       @unique
+  groupCode    String?
   userId       String
   user         User         @relation(fields: [userId], references: [id])
   assetId      String
@@ -231,6 +290,9 @@ model Rental {
   paymentProofUrl String? @db.Text
   supportingDocUrl String? @db.Text        // Berkas Surat Tugas / Proposal / KTP
   rentalType    String    @default("DAILY") // DAILY, HOURLY
+  status        String    @default("PENDING") // PENDING, APPROVED, ACTIVE, RETURNED, CANCELLED
+  paymentScheme String    @default("FULL") // FULL, DOWN_PAYMENT
+  checkOutTime  DateTime?
   penaltyFee         Float?       @default(0)
   penaltyPaidAmount  Float?       @default(0)
   penaltyStatus      String       @default("UNPAID") // UNPAID, PARTIAL, PAID, CANCELLED
@@ -269,8 +331,8 @@ model Renter {
 model RoomBooking {
   id            String              @id @default(cuid())
   bookingNumber String              @unique             // BK-2026-001
-  locationId    String
-  location      Location            @relation(fields: [locationId], references: [id])
+  locationId    String?
+  location      Location?           @relation(fields: [locationId], references: [id])
   renterId      String
   renter        Renter              @relation(fields: [renterId], references: [id])
   startTime     DateTime                                // Tanggal & jam mulai sewa
@@ -398,14 +460,27 @@ model MaintenanceSchedule {
 }
 
 model TransferLog {
-  id            String   @id @default(cuid())
-  assetId       String
-  asset         Asset    @relation(fields: [assetId], references: [id])
-  fromLocation  String?
-  toLocation    String
-  transferredBy String
-  reason        String?  @db.Text
-  transferredAt DateTime @default(now())
+  id               String    @id @default(cuid())
+  transferNumber   String?
+  assetId          String
+  asset            Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  fromLocationId   String?
+  toLocationId     String?
+  fromLocation     String?
+  toLocation       String
+  fromDepartmentId String?
+  toDepartmentId   String?
+  fromDepartment   String?
+  toDepartment     String?
+  fromPicName      String?
+  toPicName        String?
+  status           String    @default("APPROVED") // PENDING, APPROVED, REJECTED
+  transferredBy    String
+  approvedBy       String?
+  approvedAt       DateTime?
+  rejectionNotes   String?   @db.Text
+  reason           String?   @db.Text
+  transferredAt    DateTime  @default(now())
 }
 
 model ActivityLog {
@@ -1004,6 +1079,7 @@ model Consumable {
   id              String                  @id @default(cuid())
   code            String                  @unique // ATK-001
   name            String                  // Spidol Whiteboard Snowman, Kertas HVS A4 80gr
+  brand           String?                 // Merek barang: Snowman, PaperOne, Epson, dll.
   categoryId      String?
   category        Category?               @relation(fields: [categoryId], references: [id])
   unit            String                  // Rim, Box, Pcs, Botol, Pack
@@ -1023,6 +1099,12 @@ model ConsumableTransaction {
   consumable      Consumable  @relation(fields: [consumableId], references: [id], onDelete: Cascade)
   type            String      // IN (Restock/Pengadaan), OUT (Permintaan Unit/Keluar)
   quantity        Int
+  brand           String?     // Merek barang saat transaksi masuk/keluar
+  unitCost        Float?      // Harga beli per satuan saat restock (Rp)
+  totalCost       Float?      // Total biaya pembelian saat restock (Rp)
+  supplierName    String?     // Nama toko / vendor / supplier
+  invoiceNumber   String?     // Nomor nota / faktur / kuitansi
+  receiptUrl      String?     @db.Text // URL foto/PDF bukti pembelian
   recipientName   String?     // Nama peminta / penerima barang
   departmentName  String?     // Jurusan / Bagian peminta
   notes           String?     @db.Text

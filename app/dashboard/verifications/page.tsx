@@ -1,6 +1,7 @@
-﻿'use client';
+'use client';
 
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
@@ -269,13 +270,5 @@ export default function AdminVerificationListPage() {
       )}
 
     </div>
-  );
-}
-
-function Link({ href, children, ...props }: any) {
-  return (
-    <a href={href} {...props}>
-      {children}
-    </a>
   );
 }

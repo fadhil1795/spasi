@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import { Card } from '@/components/ui/Card';
@@ -12,7 +13,7 @@ import {
   KeyRound, Bell, CheckSquare, Search, Plus, Trash2,
   Save, ShieldCheck, ShieldAlert, Sliders, Settings2,
   Lock, Unlock, RefreshCw, AlertCircle, Award, Building2,
-  Edit, Check, UserCheck, UserX, Phone, Mail
+  Edit, Check, UserCheck, UserX, Phone, Mail, Eye, ArrowRight, MapPin
 } from 'lucide-react';
 
 type Tab = 'users' | 'rbac' | 'approvals' | 'departments' | 'audit' | 'notifications' | 'security';
@@ -52,6 +53,9 @@ export default function AdminUsersPage() {
   const [customPassword, setCustomPassword] = useState('User@123');
   const [resetting, setResetting] = useState(false);
 
+  // Customer Support states: Detail User
+  const [detailUser, setDetailUser] = useState<any>(null);
+
   // Customer Support states: Edit User
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editForm, setEditForm] = useState({
@@ -63,6 +67,8 @@ export default function AdminUsersPage() {
     phone: '',
     identityNo: '',
     departmentId: '',
+    address: '',
+    gender: '',
   });
   const [editing, setEditing] = useState(false);
 
@@ -97,6 +103,10 @@ export default function AdminUsersPage() {
   // Departments state
   const [departments, setDepartments] = useState<any[]>([]);
   const [deptsLoading, setDeptsLoading] = useState(true);
+  const [deptModalOpen, setDeptModalOpen] = useState(false);
+  const [editingDept, setEditingDept] = useState<any>(null);
+  const [deptForm, setDeptForm] = useState({ code: '', name: '', headName: '', description: '' });
+  const [savingDept, setSavingDept] = useState(false);
 
   // Audit Logs state
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -169,7 +179,9 @@ export default function AdminUsersPage() {
       renterCategory: u.renterCategory || 'MAHASISWA',
       phone: u.phone || '',
       identityNo: u.identityNo || '',
-      departmentId: u.department?.id || '',
+      departmentId: u.department?.id || u.departmentId || '',
+      address: u.address || '',
+      gender: u.gender || '',
     });
     setEditModalOpen(true);
   };
@@ -485,7 +497,18 @@ export default function AdminUsersPage() {
                         )}
                       </td>
                       <td style={{ padding: '0.75rem', textAlign: 'center' }}>
-                        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: '0.4rem', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap' }}>
+                          {/* Tombol Lihat Detail Profil */}
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            title="Lihat Detail Lengkap Profil Pengguna"
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.75rem', padding: '0.3rem 0.55rem' }}
+                            onClick={() => setDetailUser(u)}
+                          >
+                            <Eye size={13} />
+                            <span>Detail</span>
+                          </button>
+
                           {/* Tombol Reset Password */}
                           <button
                             className="btn btn-secondary btn-sm"
@@ -636,14 +659,191 @@ export default function AdminUsersPage() {
         </Card>
       )}
 
-      {/* TAB: DEPARTMENTS Placeholder */}
+      {/* TAB: DEPARTMENTS (CRUD Unit Pendidikan / Prodi / Fakultas) */}
       {activeTab === 'departments' && (
-        <Card style={{ padding: '3rem', textAlign: 'center' }}>
-          <Building2 size={48} style={{ color: 'var(--color-muted)', margin: '0 auto 1rem' }} />
-          <h3 style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Manajemen Unit / Fakultas</h3>
-          <p style={{ color: 'var(--color-muted)', maxWidth: '400px', margin: '0 auto' }}>
-            Manajemen unit dan penanggung jawab admin fakultas dikelola terpusat dari tab master departemen.
-          </p>
+        <Card style={{ padding: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <h3 style={{ fontWeight: 800, margin: 0 }}>Manajemen Unit Pendidikan / Prodi / Fakultas</h3>
+              <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)', marginTop: '0.2rem' }}>
+                Kelola daftar fakultas, program studi, jurusan, dan biro kerja beserta penanggung jawab unit.
+              </p>
+            </div>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={() => {
+                setEditingDept(null);
+                setDeptForm({ code: '', name: '', headName: '', description: '' });
+                setDeptModalOpen(true);
+              }}
+            >
+              <Plus size={15} /> Tambah Unit / Fakultas
+            </button>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ background: 'var(--color-surface2)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-muted)' }}>
+                  <th style={{ padding: '0.75rem' }}>Kode</th>
+                  <th style={{ padding: '0.75rem' }}>Nama Unit / Prodi / Fakultas</th>
+                  <th style={{ padding: '0.75rem' }}>Kepala Unit / PIC</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'center' }}>Jumlah Aset</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'center' }}>Jumlah Ruangan</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'center' }}>Jumlah User</th>
+                  <th style={{ padding: '0.75rem', textAlign: 'right' }}>Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {deptsLoading ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-muted)' }}>
+                      Memuat daftar unit/fakultas...
+                    </td>
+                  </tr>
+                ) : departments.length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--color-muted)' }}>
+                      Belum ada unit pendidikan/fakultas terdaftar.
+                    </td>
+                  </tr>
+                ) : (
+                  departments.map((d: any) => (
+                    <tr key={d.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <td style={{ padding: '0.75rem', fontFamily: 'monospace', fontWeight: 800, color: 'var(--color-primary)' }}>
+                        {d.code}
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>
+                        <div style={{ fontWeight: 700 }}>{d.name}</div>
+                        {d.description && <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>{d.description}</div>}
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>{d.headName || '-'}</td>
+                      <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 700 }}>{d._count?.assets || 0}</td>
+                      <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 700 }}>{d._count?.locations || 0}</td>
+                      <td style={{ padding: '0.75rem', textAlign: 'center', fontWeight: 700 }}>{d._count?.users || 0}</td>
+                      <td style={{ padding: '0.75rem', textAlign: 'right' }}>
+                        <div style={{ display: 'inline-flex', gap: '0.4rem' }}>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            onClick={() => {
+                              setEditingDept(d);
+                              setDeptForm({
+                                code: d.code || '',
+                                name: d.name || '',
+                                headName: d.headName || '',
+                                description: d.description || '',
+                              });
+                              setDeptModalOpen(true);
+                            }}
+                          >
+                            <Edit size={14} /> Edit
+                          </button>
+                          <button
+                            className="btn btn-secondary btn-sm"
+                            style={{ color: 'var(--color-danger)' }}
+                            onClick={async () => {
+                              if (!confirm(`Hapus unit "${d.name}" (${d.code})?`)) return;
+                              const res = await fetch(`/api/departments/${d.id}`, { method: 'DELETE' });
+                              const data = await res.json();
+                              if (res.ok) {
+                                showToast('Unit/fakultas berhasil dihapus', 'success');
+                                fetchDepts();
+                              } else {
+                                showToast(data.error || 'Gagal menghapus unit', 'error');
+                              }
+                            }}
+                          >
+                            <Trash2 size={14} /> Hapus
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {deptModalOpen && (
+            <div style={{ marginBottom: '1.25rem', padding: '1.25rem', borderRadius: 'var(--radius-md)', background: 'var(--color-surface2)', border: '1px solid var(--color-primary)' }}>
+              <div style={{ fontWeight: 800, marginBottom: '0.85rem' }}>
+                {editingDept ? 'Edit Unit Pendidikan / Fakultas' : 'Formulir Tambah Unit Pendidikan / Fakultas'}
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '0.85rem' }}>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.25rem' }}>Kode Unit / Fakultas *</label>
+                  <input
+                    className="input-field"
+                    placeholder="Contoh: FTI, FEB, PRODI-IF"
+                    value={deptForm.code}
+                    onChange={(e) => setDeptForm({ ...deptForm, code: e.target.value.toUpperCase() })}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.25rem' }}>Nama Lengkap Unit / Prodi / Fakultas *</label>
+                  <input
+                    className="input-field"
+                    placeholder="Contoh: Fakultas Teknologi Informasi"
+                    value={deptForm.name}
+                    onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.25rem' }}>Kepala Unit / Dekan / Kaprodi (Opsional)</label>
+                  <input
+                    className="input-field"
+                    placeholder="Contoh: Dr. Budi Santoso, M.Kom."
+                    value={deptForm.headName}
+                    onChange={(e) => setDeptForm({ ...deptForm, headName: e.target.value })}
+                  />
+                </div>
+                <div>
+                  <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.25rem' }}>Keterangan (Opsional)</label>
+                  <input
+                    className="input-field"
+                    placeholder="Deskripsi singkat unit/fakultas..."
+                    value={deptForm.description}
+                    onChange={(e) => setDeptForm({ ...deptForm, description: e.target.value })}
+                  />
+                </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.85rem' }}>
+                <button className="btn btn-secondary btn-sm" onClick={() => setDeptModalOpen(false)}>Batal</button>
+                <button
+                  className="btn btn-primary btn-sm"
+                  disabled={savingDept}
+                  onClick={async () => {
+                    if (!deptForm.code.trim() || !deptForm.name.trim()) {
+                      showToast('Kode dan Nama Unit wajib diisi', 'error');
+                      return;
+                    }
+                    try {
+                      setSavingDept(true);
+                      const url = editingDept ? `/api/departments/${editingDept.id}` : '/api/departments';
+                      const method = editingDept ? 'PUT' : 'POST';
+                      const res = await fetch(url, {
+                        method,
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(deptForm),
+                      });
+                      const data = await res.json();
+                      if (res.ok) {
+                        showToast(editingDept ? 'Unit berhasil diperbarui' : 'Unit baru berhasil ditambahkan', 'success');
+                        setDeptModalOpen(false);
+                        fetchDepts();
+                      } else {
+                        showToast(data.error || 'Gagal menyimpan unit', 'error');
+                      }
+                    } finally {
+                      setSavingDept(false);
+                    }
+                  }}
+                >
+                  {savingDept ? 'Menyimpan...' : 'Simpan Unit'}
+                </button>
+              </div>
+            </div>
+          )}
         </Card>
       )}
 
@@ -658,14 +858,73 @@ export default function AdminUsersPage() {
         </Card>
       )}
 
-      {/* TAB: AUDIT Placeholder */}
+      {/* TAB: AUDIT TRAIL */}
       {activeTab === 'audit' && (
-        <Card style={{ padding: '3rem', textAlign: 'center' }}>
-          <Clipboard size={48} style={{ color: 'var(--color-muted)', margin: '0 auto 1rem' }} />
-          <h3 style={{ fontWeight: 800, marginBottom: '0.5rem' }}>Audit Trail Viewer</h3>
-          <p style={{ color: 'var(--color-muted)', maxWidth: '400px', margin: '0 auto' }}>
-            Rekaman aktivitas user dan log perubahan data (Log Audit) dapat diakses di menu utama Laporan &gt; Audit.
-          </p>
+        <Card style={{ padding: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', flexWrap: 'wrap', gap: '0.75rem' }}>
+            <div>
+              <h3 style={{ fontWeight: 800, margin: 0 }}>Audit Trail &amp; Log Aktivitas Sistem</h3>
+              <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)', marginTop: '0.2rem' }}>
+                Rekaman 100 aktivitas dan perubahan data terbaru pada sistem (Dari A → Menjadi B).
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button className="btn btn-secondary btn-sm" onClick={fetchAuditLogs}>
+                <RefreshCw size={14} /> Muat Ulang
+              </button>
+              <Link href="/dashboard/logs" className="btn btn-primary btn-sm" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                Buka Log Sistem Lengkap <ArrowRight size={14} />
+              </Link>
+            </div>
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ background: 'var(--color-surface2)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-muted)' }}>
+                  <th style={{ padding: '0.75rem' }}>Waktu</th>
+                  <th style={{ padding: '0.75rem' }}>Aktor / User</th>
+                  <th style={{ padding: '0.75rem' }}>Aksi</th>
+                  <th style={{ padding: '0.75rem' }}>Entitas</th>
+                  <th style={{ padding: '0.75rem' }}>Keterangan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditLoading ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-muted)' }}>
+                      Memuat log audit...
+                    </td>
+                  </tr>
+                ) : auditLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--color-muted)' }}>
+                      Belum ada rekaman log aktivitas.
+                    </td>
+                  </tr>
+                ) : (
+                  auditLogs.slice(0, 25).map((l: any) => (
+                    <tr key={l.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <td style={{ padding: '0.75rem', whiteSpace: 'nowrap', fontSize: '0.78rem', color: 'var(--color-muted)' }}>
+                        {formatDate(l.timestamp, 'dd MMM yyyy HH:mm')}
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>
+                        <div style={{ fontWeight: 700 }}>{l.user?.name || 'Sistem'}</div>
+                        <div style={{ fontSize: '0.73rem', color: 'var(--color-muted)' }}>{l.user?.email || '-'}</div>
+                      </td>
+                      <td style={{ padding: '0.75rem' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '0.18rem 0.45rem', borderRadius: '4px', background: 'var(--color-surface2)', border: '1px solid var(--color-border)' }}>
+                          {l.action}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.75rem', fontWeight: 600 }}>{l.entity}</td>
+                      <td style={{ padding: '0.75rem' }}>{l.details || '-'}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </Card>
       )}
 
@@ -674,7 +933,19 @@ export default function AdminUsersPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
           <div>
             <label className="input-label">Unit / Departemen (kosongkan = Global)</label>
-            <input className="input-field" style={{ width: '100%' }} placeholder="Salin Department ID" value={configForm.departmentId} onChange={e => setConfigForm({ ...configForm, departmentId: e.target.value })} />
+            <select
+              className="input-field"
+              style={{ width: '100%' }}
+              value={configForm.departmentId}
+              onChange={(e) => setConfigForm({ ...configForm, departmentId: e.target.value })}
+            >
+              <option value="">-- Global (Semua Unit / Departemen) --</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name} ({d.code})
+                </option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="input-label">Jenis Transaksi</label>
@@ -746,19 +1017,137 @@ export default function AdminUsersPage() {
         )}
       </Modal>
 
+      {/* MODAL DETAIL: Lihat Profil Lengkap Pengguna */}
+      <Modal isOpen={!!detailUser} onClose={() => setDetailUser(null)} title="👤 Detail Profil Pengguna" maxWidth="650px">
+        {detailUser && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+            {/* Profile Header Banner */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', background: 'var(--color-surface2)', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+              <div style={{
+                width: '56px', height: '56px', borderRadius: '50%', background: 'var(--grad-primary)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 900, fontSize: '1.3rem', flexShrink: 0
+              }}>
+                {(detailUser.name || 'U').slice(0, 2).toUpperCase()}
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--color-text)' }}>{detailUser.name}</div>
+                <div style={{ fontSize: '0.85rem', color: 'var(--color-primary-light)', display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.15rem' }}>
+                  <Mail size={13} /> {detailUser.email}
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.45rem', flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 800, padding: '0.15rem 0.55rem', borderRadius: '4px', background: 'rgba(99, 102, 241, 0.15)', color: '#6366f1' }}>
+                    {detailUser.role}
+                  </span>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 700, padding: '0.15rem 0.55rem', borderRadius: '4px', background: detailUser.isSuspended ? 'rgba(239, 68, 68, 0.15)' : 'rgba(16, 185, 129, 0.15)', color: detailUser.isSuspended ? '#ef4444' : '#10b981' }}>
+                    {detailUser.isSuspended ? 'Suspended (Diblokir)' : 'Akun Aktif'}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Detail Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.85rem', fontSize: '0.85rem' }}>
+              <div style={{ padding: '0.75rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)', fontWeight: 700 }}>EMAIL LOGIN</div>
+                <div style={{ fontWeight: 600, marginTop: '0.2rem', wordBreak: 'break-all' }}>{detailUser.email}</div>
+              </div>
+              <div style={{ padding: '0.75rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)', fontWeight: 700 }}>NO. WHATSAPP / HP</div>
+                <div style={{ fontWeight: 600, marginTop: '0.2rem' }}>{detailUser.phone || '-'}</div>
+              </div>
+              <div style={{ padding: '0.75rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)', fontWeight: 700 }}>NIP / NIM / NIK</div>
+                <div style={{ fontWeight: 600, fontFamily: 'monospace', marginTop: '0.2rem' }}>{detailUser.identityNo || '-'}</div>
+              </div>
+              <div style={{ padding: '0.75rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)', fontWeight: 700 }}>KATEGORI PEMINJAM</div>
+                <div style={{ fontWeight: 600, marginTop: '0.2rem' }}>{detailUser.renterCategory || '-'}</div>
+              </div>
+              <div style={{ padding: '0.75rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)', fontWeight: 700 }}>UNIT / DEPARTEMEN</div>
+                <div style={{ fontWeight: 600, marginTop: '0.2rem' }}>{detailUser.department?.name || 'Pusat Kampus / Umum'}</div>
+              </div>
+              <div style={{ padding: '0.75rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)', fontWeight: 700 }}>JENIS KELAMIN</div>
+                <div style={{ fontWeight: 600, marginTop: '0.2rem' }}>{detailUser.gender || '-'}</div>
+              </div>
+              <div style={{ padding: '0.75rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', gridColumn: '1 / -1' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)', fontWeight: 700 }}>ALAMAT DOMISILI</div>
+                <div style={{ fontWeight: 600, marginTop: '0.2rem' }}>{detailUser.address || detailUser.residence || '-'}</div>
+              </div>
+              <div style={{ padding: '0.75rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)', fontWeight: 700 }}>RIWAYAT PEMINJAMAN</div>
+                <div style={{ fontWeight: 800, fontSize: '1.1rem', color: 'var(--color-primary-light)', marginTop: '0.2rem' }}>
+                  {detailUser._count?.loans || 0} Transaksi
+                </div>
+              </div>
+              <div style={{ padding: '0.75rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
+                <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)', fontWeight: 700 }}>TANGGAL TERDAFTAR</div>
+                <div style={{ fontWeight: 600, marginTop: '0.2rem' }}>
+                  {detailUser.createdAt ? formatDate(detailUser.createdAt, 'dd MMM yyyy') : '-'}
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', borderTop: '1px solid var(--color-border)', paddingTop: '1rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={() => {
+                    const u = detailUser;
+                    setDetailUser(null);
+                    openEditModal(u);
+                  }}
+                >
+                  <Edit size={14} /> Edit Profil
+                </button>
+                <button
+                  className="btn btn-secondary btn-sm"
+                  onClick={() => {
+                    const u = detailUser;
+                    setDetailUser(null);
+                    setTargetUser(u);
+                    setCustomPassword('User@123');
+                    setResetModalOpen(true);
+                  }}
+                >
+                  <KeyRound size={14} /> Reset Password
+                </button>
+              </div>
+              <button className="btn btn-secondary btn-sm" onClick={() => setDetailUser(null)}>
+                Tutup
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
       {/* MODAL 2: Edit Data & Peran Pengguna */}
-      <Modal isOpen={editModalOpen} onClose={() => setEditModalOpen(false)} title="✏️ Edit Profil &amp; Hak Akses Pengguna">
+      <Modal isOpen={editModalOpen} onClose={() => setEditModalOpen(false)} title="✏️ Edit Profil &amp; Hak Akses Pengguna" maxWidth="650px">
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <div>
-            <label className="input-label">Nama Lengkap *</label>
-            <input
-              type="text"
-              className="input-field"
-              style={{ width: '100%' }}
-              value={editForm.name}
-              onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-              required
-            />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div>
+              <label className="input-label">Nama Lengkap *</label>
+              <input
+                type="text"
+                className="input-field"
+                style={{ width: '100%' }}
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                required
+              />
+            </div>
+            <div>
+              <label className="input-label">Alamat Email (Login) *</label>
+              <input
+                type="email"
+                className="input-field"
+                style={{ width: '100%' }}
+                value={editForm.email}
+                onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                required
+              />
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
@@ -817,19 +1206,46 @@ export default function AdminUsersPage() {
             </div>
           </div>
 
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div>
+              <label className="input-label">Unit / Departemen</label>
+              <select
+                className="input-field"
+                style={{ width: '100%' }}
+                value={editForm.departmentId}
+                onChange={(e) => setEditForm({ ...editForm, departmentId: e.target.value })}
+              >
+                <option value="">Pusat Kampus / Tanpa Unit</option>
+                {departments.map(d => (
+                  <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="input-label">Jenis Kelamin</label>
+              <select
+                className="input-field"
+                style={{ width: '100%' }}
+                value={editForm.gender}
+                onChange={(e) => setEditForm({ ...editForm, gender: e.target.value })}
+              >
+                <option value="">-- Tidak Ditentukan --</option>
+                <option value="Laki-laki">Laki-laki</option>
+                <option value="Perempuan">Perempuan</option>
+              </select>
+            </div>
+          </div>
+
           <div>
-            <label className="input-label">Unit / Departemen</label>
-            <select
+            <label className="input-label">Alamat Domisili</label>
+            <textarea
               className="input-field"
+              rows={2}
               style={{ width: '100%' }}
-              value={editForm.departmentId}
-              onChange={(e) => setEditForm({ ...editForm, departmentId: e.target.value })}
-            >
-              <option value="">Pusat Kampus / Tanpa Unit</option>
-              {departments.map(d => (
-                <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
-              ))}
-            </select>
+              placeholder="Alamat lengkap pengguna..."
+              value={editForm.address}
+              onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+            />
           </div>
 
           <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'flex-end', marginTop: '0.5rem' }}>

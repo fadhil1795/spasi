@@ -60,25 +60,43 @@ export async function POST(request: Request, { params }: { params: { id: string 
         },
       });
 
-      // Update room status to RENTED
-      await tx.location.update({
-        where: { id: booking.locationId },
-        data: { status: 'RENTED' },
-      });
+      // Update room status to RENTED (jika menggunakan ruangan)
+      if (booking.locationId) {
+        await tx.location.update({
+          where: { id: booking.locationId },
+          data: { status: 'RENTED' },
+        });
+      }
 
-      // Mark addon assets as BORROWED
+      // Kurangi availableQty addon assets sesuai jumlah sewa
       const booking_full = await tx.roomBooking.findUnique({
         where: { id: params.id },
         include: { addonAssets: true },
       });
       if (booking_full) {
         for (const addon of booking_full.addonAssets) {
-          await tx.asset.update({
-            where: { id: addon.assetId },
-            data: { status: 'BORROWED' },
-          });
+          const assetRec = await tx.asset.findUnique({ where: { id: addon.assetId } });
+          if (assetRec) {
+            const newAvail = Math.max(0, (assetRec.availableQty ?? assetRec.quantity ?? 1) - (addon.quantity || 1));
+            await tx.asset.update({
+              where: { id: addon.assetId },
+              data: {
+                availableQty: newAvail,
+                status: newAvail === 0 ? 'BORROWED' : 'AVAILABLE',
+              },
+            });
+          }
         }
       }
+    });
+
+    const { createAuditLog } = await import('@/lib/audit');
+    await createAuditLog({
+      userId: (session.user as any).id,
+      action: 'ROOM_BOOKING_CHECK_IN',
+      entity: 'RoomBooking',
+      entityId: params.id,
+      details: `Check-In selesai untuk booking ${booking.bookingNumber} oleh petugas ${inspectedBy || 'Petugas'}.`,
     });
 
     return NextResponse.json({ message: 'Check-in berhasil', checkInTime: new Date() });

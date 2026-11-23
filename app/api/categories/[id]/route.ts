@@ -24,13 +24,25 @@ export async function PUT(
       return NextResponse.json({ error: 'Nama kategori wajib diisi' }, { status: 400 });
     }
 
+    const updateData: any = {
+      name: body.name.trim(),
+      usefulLifeYears: body.usefulLifeYears ? parseInt(body.usefulLifeYears) : 5,
+      depreciationRate: body.depreciationRate ? parseFloat(body.depreciationRate) : 0.2,
+    };
+
+    if (body.code !== undefined) {
+      updateData.code = body.code
+        ? body.code.trim().toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10)
+        : null;
+    }
+
+    if (body.parentId !== undefined) {
+      updateData.parentId = body.parentId || null;
+    }
+
     const updatedCategory = await prisma.category.update({
       where: { id: params.id },
-      data: {
-        name: body.name,
-        usefulLifeYears: body.usefulLifeYears ? parseInt(body.usefulLifeYears) : 5,
-        depreciationRate: body.depreciationRate ? parseFloat(body.depreciationRate) : 0.2,
-      },
+      data: updateData,
     });
 
     return NextResponse.json(updatedCategory);

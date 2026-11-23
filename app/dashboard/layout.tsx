@@ -56,6 +56,12 @@ export default function DashboardLayout({
         isPath('/dashboard/categories') ||
         isPath('/dashboard/tools') ||
         isPath('/dashboard/reports') ||
+        isPath('/dashboard/procurement') ||
+        isPath('/dashboard/stock-opname') ||
+        isPath('/dashboard/consumables') ||
+        isPath('/dashboard/buildings') ||
+        isPath('/dashboard/brands') ||
+        isPath('/dashboard/logs') ||
         (isPath('/dashboard/room-bookings') && !isRoomBookingDetail) ||
         isPath('/dashboard/returns') ||
         isPath('/dashboard/loans/scan')

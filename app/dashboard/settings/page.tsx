@@ -19,7 +19,7 @@ export default function SettingsPage() {
   const userRole = (session?.user as any)?.role || 'BORROWER';
   const isAdmin = ['SUPER_ADMIN', 'ADMIN'].includes(userRole);
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'users' | 'payment' | 'system' | 'template' | 'storage' | 'sanctions' | 'policies' | 'whatsapp'>('profile');
+  const [activeTab, setActiveTab] = useState<'payment' | 'system' | 'template' | 'storage' | 'policies' | 'whatsapp'>('whatsapp');
 
   // WhatsApp settings state
   const [whatsappLoading, setWhatsappLoading] = useState(false);
@@ -144,24 +144,26 @@ export default function SettingsPage() {
   const tabParam = searchParams.get('tab');
 
   useEffect(() => {
-    fetchProfile();
+    if (!isAdmin && session) {
+      router.replace('/dashboard/profile');
+      return;
+    }
+    if (tabParam === 'profile' || tabParam === 'sanctions') {
+      router.replace(tabParam === 'sanctions' ? '/dashboard/profile?tab=sanctions' : '/dashboard/profile');
+      return;
+    }
+    const validSystemTabs = ['payment', 'system', 'template', 'storage', 'policies', 'whatsapp'];
+    const targetTab = (tabParam && validSystemTabs.includes(tabParam)) ? tabParam : 'whatsapp';
+    setActiveTab(targetTab as any);
     if (isAdmin) {
-      fetchSystemSettings();
-      fetchTemplateSettings();
+      if (targetTab === 'payment') fetchPaymentSettings();
+      if (targetTab === 'system') fetchSystemSettings();
+      if (targetTab === 'template') fetchTemplateSettings();
+      if (targetTab === 'storage') fetchStorageSettings();
+      if (targetTab === 'policies') fetchPoliciesData();
+      if (targetTab === 'whatsapp') fetchWhatsAppSettings();
     }
-  }, [isAdmin]);
-
-  useEffect(() => {
-    if (tabParam && ['profile', 'payment', 'system', 'template', 'storage', 'sanctions', 'policies', 'whatsapp'].includes(tabParam)) {
-      setActiveTab(tabParam as any);
-      if (tabParam === 'payment' && isAdmin) fetchPaymentSettings();
-      if (tabParam === 'system' && isAdmin) fetchSystemSettings();
-      if (tabParam === 'template' && isAdmin) fetchTemplateSettings();
-      if (tabParam === 'storage' && isAdmin) fetchStorageSettings();
-      if (tabParam === 'policies' && isAdmin) fetchPoliciesData();
-      if (tabParam === 'whatsapp' && isAdmin) fetchWhatsAppSettings();
-    }
-  }, [tabParam, isAdmin]);
+  }, [tabParam, isAdmin, session]);
 
   const fetchProfile = async () => {
     try {
@@ -684,407 +686,47 @@ export default function SettingsPage() {
 
 
 
+  const SETTINGS_META: Record<string, { title: string; desc: string }> = {
+    whatsapp: {
+      title: 'WhatsApp Gateway',
+      desc: 'Konfigurasikan integrasi WhatsApp API untuk notifikasi otomatis persetujuan, pengingat jatuh tempo, dan OTP.',
+    },
+    payment: {
+      title: 'Rekening & QRIS Instansi',
+      desc: 'Kelola daftar rekening bank resmi dan kode QRIS untuk pembayaran sewa sarana & pelunasan denda.',
+    },
+    system: {
+      title: 'Sistem & Otomatisasi',
+      desc: 'Atur batas waktu pembatalan otomatis, parameter operasional, dan perilaku sistem global.',
+    },
+    policies: {
+      title: 'Kelola Kebijakan & Aturan',
+      desc: 'Tetapkan batas kuota peminjaman per role/kategori serta jadwal blokir operasional ruangan & aset.',
+    },
+    storage: {
+      title: 'Penyimpanan S3 / MinIO',
+      desc: 'Hubungkan object storage S3 atau MinIO untuk menyimpan foto aset, bukti pembayaran, dan dokumen BAST.',
+    },
+    template: {
+      title: 'Template Dokumen & Kop Surat',
+      desc: 'Sesuaikan identitas instansi, logo resmi, penanda tangan BAST/surat izin, dan footer kuitansi.',
+    },
+  };
+  const currentMeta = SETTINGS_META[activeTab] || SETTINGS_META.whatsapp;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: '1000px', margin: '0 auto' }}>
-      <div>
-        <h1 style={{ fontSize: '1.8rem', fontWeight: 800 }}>Pengaturan Akun &amp; Sistem</h1>
-        <p style={{ color: 'var(--color-muted)', fontSize: '0.9rem' }}>
-          Kelola informasi profil pribadi, kata sandi, rekening pembayaran instansi, dan manajemen hak akses pengguna.
-        </p>
-      </div>
-
-      {/* Segmented Tab Navigation */}
-      <div style={{ display: 'flex', background: 'var(--color-surface2)', borderRadius: 'var(--radius-md)', padding: '0.25rem', gap: '0.25rem', width: 'fit-content', flexWrap: 'wrap' }}>
-        <button
-          type="button"
-          onClick={() => router.push('/dashboard/settings?tab=profile')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '0.4rem',
-            padding: '0.65rem 1.25rem', borderRadius: 'var(--radius-sm)', border: 'none',
-            background: activeTab === 'profile' ? 'var(--color-surface)' : 'transparent',
-            color: activeTab === 'profile' ? 'var(--color-primary)' : 'var(--color-muted)',
-            fontWeight: activeTab === 'profile' ? 700 : 500, fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s',
-          }}
-        >
-          <User size={18} /> Profil Saya &amp; Keamanan
-        </button>
-
-        <button
-          type="button"
-          onClick={() => router.push('/dashboard/settings?tab=sanctions')}
-          style={{
-            display: 'flex', alignItems: 'center', gap: '0.4rem',
-            padding: '0.65rem 1.25rem', borderRadius: 'var(--radius-md)', border: 'none',
-            background: activeTab === 'sanctions' ? 'var(--color-primary)' : 'transparent',
-            color: activeTab === 'sanctions' ? '#fff' : 'var(--color-muted)',
-            fontWeight: activeTab === 'sanctions' ? 700 : 500, fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s',
-          }}
-        >
-          <AlertCircle size={18} /> Riwayat Sanksi Anda {violations.length > 0 && <span style={{ background: '#ef4444', color: '#fff', borderRadius: '999px', padding: '0.05rem 0.4rem', fontSize: '0.72rem', fontWeight: 800 }}>{violations.length}</span>}
-        </button>
-
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard/settings?tab=payment')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.4rem',
-              padding: '0.65rem 1.25rem', borderRadius: 'var(--radius-sm)', border: 'none',
-              background: activeTab === 'payment' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'payment' ? '#fff' : 'var(--color-muted)',
-              fontWeight: activeTab === 'payment' ? 700 : 500, fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s',
-            }}
-          >
-            <CreditCard size={18} /> Pengaturan Rekening &amp; QRIS
-          </button>
-        )}
-
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard/settings?tab=system')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.4rem',
-              padding: '0.65rem 1.25rem', borderRadius: 'var(--radius-sm)', border: 'none',
-              background: activeTab === 'system' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'system' ? '#fff' : 'var(--color-muted)',
-              fontWeight: activeTab === 'system' ? 700 : 500, fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s',
-            }}
-          >
-            <Shield size={18} /> Sistem &amp; Otomatisasi
-          </button>
-        )}
-
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard/settings?tab=storage')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.4rem',
-              padding: '0.65rem 1.25rem', borderRadius: 'var(--radius-sm)', border: 'none',
-              background: activeTab === 'storage' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'storage' ? '#fff' : 'var(--color-muted)',
-              fontWeight: activeTab === 'storage' ? 700 : 500, fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s',
-            }}
-          >
-            <HardDrive size={18} /> Penyimpanan S3 / MinIO
-          </button>
-        )}
-
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard/settings?tab=whatsapp')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.4rem',
-              padding: '0.65rem 1.25rem', borderRadius: 'var(--radius-sm)', border: 'none',
-              background: activeTab === 'whatsapp' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'whatsapp' ? '#fff' : 'var(--color-muted)',
-              fontWeight: activeTab === 'whatsapp' ? 700 : 500, fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s',
-            }}
-          >
-            <MessageSquare size={18} /> WhatsApp Gateway
-          </button>
-        )}
-
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard/settings?tab=template')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.4rem',
-              padding: '0.65rem 1.25rem', borderRadius: 'var(--radius-sm)', border: 'none',
-              background: activeTab === 'template' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'template' ? '#fff' : 'var(--color-muted)',
-              fontWeight: activeTab === 'template' ? 700 : 500, fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s',
-            }}
-          >
-            <FileText size={18} /> Template Dokumen
-          </button>
-        )}
-
-
-
-        {isAdmin && (
-          <button
-            type="button"
-            onClick={() => router.push('/dashboard/settings?tab=policies')}
-            style={{
-              display: 'flex', alignItems: 'center', gap: '0.4rem',
-              padding: '0.65rem 1.25rem', borderRadius: 'var(--radius-sm)', border: 'none',
-              background: activeTab === 'policies' ? 'var(--color-primary)' : 'transparent',
-              color: activeTab === 'policies' ? '#fff' : 'var(--color-muted)',
-              fontWeight: activeTab === 'policies' ? 700 : 500, fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s',
-            }}
-          >
-            <ShieldAlert size={18} /> Kelola Kebijakan &amp; Aturan
-          </button>
-        )}
-      </div>
-
-      {activeTab === 'profile' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          {/* Section: Profile Info */}
-          <Card style={{ padding: '1.75rem' }}>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <User size={20} style={{ color: 'var(--color-primary)' }} /> Identitas Pribadi &amp; Foto Profil
-            </h2>
-
-            {profileLoading ? (
-              <Skeleton height="240px" />
-            ) : (
-              <form onSubmit={handleUpdateProfile} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem', background: 'var(--color-surface2)', padding: '1.25rem', borderRadius: 'var(--radius-md)' }}>
-                  <div
-                    style={{
-                      width: '80px',
-                      height: '80px',
-                      borderRadius: '50%',
-                      background: profileForm.avatarUrl ? `url(${profileForm.avatarUrl}) center/cover` : 'var(--grad-accent)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: '#FFFFFF',
-                      fontSize: '2rem',
-                      fontWeight: 800,
-                      flexShrink: 0,
-                      boxShadow: 'var(--shadow-glow)',
-                    }}
-                  >
-                    {!profileForm.avatarUrl && (profileForm.name?.[0] || 'U')}
-                  </div>
-
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: '0.25rem' }}>Foto Profil</div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--color-muted)', marginBottom: '0.75rem' }}>
-                      Unggah foto wajah resmi (JPG, PNG, maks 2MB).
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
-                      <label className="btn btn-secondary btn-sm" style={{ cursor: 'pointer' }}>
-                        <Upload size={14} /> {uploadingAvatar ? 'Mengunggah...' : 'Pilih Foto Baru'}
-                        <input type="file" accept="image/*" onChange={handleAvatarUpload} style={{ display: 'none' }} />
-                      </label>
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-                  <div>
-                    <label className="input-label">Nama Lengkap *</label>
-                    <input
-                      className="input-field"
-                      style={{ width: '100%' }}
-                      placeholder="Masukkan nama lengkap"
-                      value={profileForm.name}
-                      onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <label className="input-label">Alamat Email (Akun)</label>
-                    <input
-                      className="input-field"
-                      style={{ width: '100%', opacity: 0.7 }}
-                      value={profileForm.email}
-                      disabled
-                    />
-                  </div>
-
-                  <div>
-                    <label className="input-label">Nomor NIP / NIM / NIK *</label>
-                    <input
-                      className="input-field"
-                      style={{ width: '100%' }}
-                      placeholder="Contoh: NIP-199208..."
-                      value={profileForm.identityNo}
-                      onChange={(e) => setProfileForm({ ...profileForm, identityNo: e.target.value })}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="input-label">Nomor WhatsApp / Telepon *</label>
-                    <input
-                      className="input-field"
-                      style={{ width: '100%' }}
-                      placeholder="081234567890"
-                      value={profileForm.phone}
-                      onChange={(e) => setProfileForm({ ...profileForm, phone: e.target.value })}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="input-label">Jenis Kelamin</label>
-                    <select
-                      className="input-field"
-                      style={{ width: '100%' }}
-                      value={profileForm.gender}
-                      onChange={(e) => setProfileForm({ ...profileForm, gender: e.target.value })}
-                    >
-                      <option value="Laki-laki">Laki-laki</option>
-                      <option value="Perempuan">Perempuan</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="input-label">Tempat Lahir</label>
-                    <input
-                      className="input-field"
-                      style={{ width: '100%' }}
-                      placeholder="Kota kelahiran"
-                      value={profileForm.birthPlace}
-                      onChange={(e) => setProfileForm({ ...profileForm, birthPlace: e.target.value })}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="input-label">Tanggal Lahir</label>
-                    <input
-                      type="date"
-                      className="input-field"
-                      style={{ width: '100%' }}
-                      value={profileForm.birthDate}
-                      onChange={(e) => setProfileForm({ ...profileForm, birthDate: e.target.value })}
-                    />
-                  </div>
-
-                  <div>
-                    <label className="input-label">Domisili (Kota Saat Ini)</label>
-                    <input
-                      className="input-field"
-                      style={{ width: '100%' }}
-                      placeholder="Contoh: Jakarta Selatan"
-                      value={profileForm.residence}
-                      onChange={(e) => setProfileForm({ ...profileForm, residence: e.target.value })}
-                    />
-                  </div>
-
-                  <div style={{ gridColumn: '1 / -1' }}>
-                    <label className="input-label">Alamat Lengkap Tempat Tinggal</label>
-                    <textarea
-                      className="input-field"
-                      style={{ width: '100%', minHeight: '80px', resize: 'vertical' }}
-                      placeholder="Nama jalan, RT/RW, kelurahan, kecamatan..."
-                      value={profileForm.address}
-                      onChange={(e) => setProfileForm({ ...profileForm, address: e.target.value })}
-                    />
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                  <Button type="submit" variant="primary" isLoading={profileSaving}>
-                    <Save size={16} /> Simpan Perubahan Profil
-                  </Button>
-                </div>
-              </form>
-            )}
-          </Card>
-
-          {/* Section: Change Password */}
-          <Card style={{ padding: '1.75rem' }}>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <KeyRound size={20} style={{ color: 'var(--color-accent)' }} /> Ubah Password Akun
-            </h2>
-
-            <form onSubmit={handleChangePassword} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-              {profileForm.hasPassword && (
-                <div>
-                  <label className="input-label">Password Lama *</label>
-                  <input
-                    type="password"
-                    className="input-field"
-                    style={{ width: '100%' }}
-                    placeholder="Masukkan password saat ini"
-                    value={passwordForm.oldPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, oldPassword: e.target.value })}
-                    required
-                  />
-                </div>
-              )}
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-                <div>
-                  <label className="input-label">Password Baru *</label>
-                  <input
-                    type="password"
-                    className="input-field"
-                    style={{ width: '100%' }}
-                    placeholder="Minimal 6 karakter"
-                    value={passwordForm.newPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="input-label">Konfirmasi Password Baru *</label>
-                  <input
-                    type="password"
-                    className="input-field"
-                    style={{ width: '100%' }}
-                    placeholder="Ulangi password baru"
-                    value={passwordForm.confirmPassword}
-                    onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
-                <Button type="submit" variant="secondary" isLoading={passwordSaving}>
-                  <Lock size={16} /> {profileForm.hasPassword ? 'Perbarui Password' : 'Buat Password Baru'}
-                </Button>
-              </div>
-            </form>
-          </Card>
-        </div>
-      )}
-
-      {/* Tab 1b: SANCTIONS HISTORY */}
-      {activeTab === 'sanctions' && (
-        <Card style={{ padding: '1.75rem' }}>
-          <h2 style={{ fontSize: '1.2rem', fontWeight: 800, marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <AlertCircle size={22} style={{ color: 'var(--color-danger)' }} /> Catatan Sanksi &amp; Pelanggaran Anda
-          </h2>
-          <p style={{ color: 'var(--color-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
-            Sistem secara otomatis melacak riwayat keterlambatan pengembalian barang dan status penangguhan akun Anda.
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+        <div>
+          <div style={{ fontSize: '0.78rem', fontWeight: 700, color: 'var(--color-primary-light)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.25rem' }}>
+            Pengaturan Sistem Instansi
+          </div>
+          <h1 style={{ fontSize: '1.8rem', fontWeight: 800 }}>{currentMeta.title}</h1>
+          <p style={{ color: 'var(--color-muted)', fontSize: '0.9rem' }}>
+            {currentMeta.desc}
           </p>
-
-          {violations.length === 0 ? (
-            <div style={{ padding: '3rem 1.5rem', textAlign: 'center', color: 'var(--color-muted)', background: 'var(--color-surface2)', borderRadius: 'var(--radius-md)' }}>
-              <CheckCircle size={40} style={{ color: '#10b981', marginBottom: '0.75rem' }} />
-              <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--color-text)' }}>Akun Anda Bersih dari Pelanggaran!</div>
-              <p style={{ fontSize: '0.82rem', marginTop: '0.2rem' }}>Terima kasih telah mematuhi aturan batas waktu pengembalian sarpras.</p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
-              <div style={{ padding: '1rem', background: profileForm.role === 'BORROWER' && violations.some(v => v.type === 'SUSPENSION') ? 'rgba(239,68,68,0.08)' : 'rgba(16,185,129,0.06)', borderRadius: 'var(--radius-md)', borderLeft: '4.5px solid #ef4444', marginBottom: '0.5rem' }}>
-                <strong style={{ fontSize: '0.9rem', color: 'var(--color-text)' }}>Status Akun Saat Ini:</strong>{' '}
-                {violations.some(v => v.type === 'SUSPENSION') ? (
-                  <span style={{ color: '#ef4444', fontWeight: 900 }}>🚨 DITANGGUHKAN / TERBLOKIR SEMENTARA</span>
-                ) : (
-                  <span style={{ color: '#10b981', fontWeight: 900 }}>✅ AKTIF &amp; BEBAS PINJAM</span>
-                )}
-                <p style={{ margin: '0.35rem 0 0', fontSize: '0.78rem', color: 'var(--color-muted)' }}>
-                  *Jika akun Anda ditangguhkan otomatis (karena 3x telat), silakan hubungi petugas admin sarpras untuk pembukaan blokir manual.
-                </p>
-              </div>
-
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                {violations.map((v, i) => (
-                  <div key={v.id || i} style={{ padding: '1rem', background: 'var(--color-surface2)', borderRadius: 'var(--radius-md)', borderLeft: `3.5px solid ${v.type === 'SUSPENSION' ? '#ef4444' : '#f59e0b'}` }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem', fontSize: '0.75rem', color: 'var(--color-muted)', fontWeight: 600 }}>
-                      <span style={{ textTransform: 'uppercase' }}>Tipe: {v.type}</span>
-                      <span>{new Date(v.createdAt).toLocaleString('id-ID')}</span>
-                    </div>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: '0.88rem' }}>{v.description}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </Card>
-      )}
+        </div>
+      </div>
 
       {/* Tab 2: PAYMENT SETTINGS (Admin Only) */}
       {activeTab === 'payment' && isAdmin && (

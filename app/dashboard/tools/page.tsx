@@ -17,6 +17,12 @@ import {
   Boxes,
   Database,
   CheckCircle2,
+  FileCheck,
+  AlertCircle,
+  Bookmark,
+  Layers,
+  Sparkles,
+  HelpCircle,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -25,7 +31,7 @@ export default function ToolsUtilitasPage() {
 
   // Import Modal State
   const [importModalOpen, setModalOpen] = useState(false);
-  const [importType, setImportType] = useState<'biblio' | 'marc' | 'items'>('biblio');
+  const [importType, setImportType] = useState<'catalog' | 'items' | 'json'>('catalog');
   const [parsedData, setParsedData] = useState<any[]>([]);
   const [fileName, setFileName] = useState('');
   const [importing, setImporting] = useState(false);
@@ -41,10 +47,11 @@ export default function ToolsUtilitasPage() {
       reader.onload = (evt) => {
         try {
           const json = JSON.parse(evt.target?.result as string);
-          setParsedData(Array.isArray(json) ? json : [json]);
-          showToast(`Berhasil membaca ${Array.isArray(json) ? json.length : 1} record dari ${file.name}`, 'success');
+          const dataArr = Array.isArray(json) ? json : [json];
+          setParsedData(dataArr);
+          showToast(`Berhasil membaca ${dataArr.length} data dari ${file.name}`, 'success');
         } catch (err) {
-          showToast('File JSON tidak valid', 'error');
+          showToast('Format berkas JSON tidak valid', 'error');
         }
       };
       reader.readAsText(file);
@@ -69,7 +76,7 @@ export default function ToolsUtilitasPage() {
 
   const handleExecuteImport = async () => {
     if (parsedData.length === 0) {
-      showToast('Pilih berkas data yang berisi baris valid terlebih dahulu', 'error');
+      showToast('Pilih berkas Excel/CSV yang berisi baris data valid', 'error');
       return;
     }
 
@@ -84,15 +91,15 @@ export default function ToolsUtilitasPage() {
         }),
       });
 
+      const result = await res.json();
+
       if (res.ok) {
-        const result = await res.json();
-        showToast(result.message, 'success');
+        showToast(result.message || 'Impor data aset berhasil diselesaikan!', 'success');
         setModalOpen(false);
         setParsedData([]);
         setFileName('');
       } else {
-        const err = await res.json();
-        showToast(err.error || 'Gagal mengimpor data', 'error');
+        showToast(result.error || 'Gagal memproses impor data', 'error');
       }
     } catch (e) {
       showToast('Terjadi kesalahan jaringan saat mengimpor', 'error');
@@ -101,7 +108,7 @@ export default function ToolsUtilitasPage() {
     }
   };
 
-  const openImportDialog = (type: 'biblio' | 'marc' | 'items') => {
+  const openImportDialog = (type: 'catalog' | 'items' | 'json') => {
     setImportType(type);
     setParsedData([]);
     setFileName('');
@@ -112,206 +119,255 @@ export default function ToolsUtilitasPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
       {/* Header */}
       <div>
-        <h1 style={{ fontSize: '1.8rem', fontWeight: 800 }}>Pintasan & Utilitas Data Aset</h1>
-        <p style={{ color: 'var(--color-muted)', fontSize: '0.9rem' }}>
-          Pusat pencetakan label stiker, ekspor & impor data katalog aset, cetak buku inventaris, dan kelola rincian unit barang.
+        <h1 style={{ fontSize: '1.8rem', fontWeight: 800, color: 'var(--color-text)', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <Database size={28} style={{ color: 'var(--color-primary-light)' }} />
+          Pusat Utilitas & Manajemen Data Aset
+        </h1>
+        <p style={{ color: 'var(--color-muted)', fontSize: '0.9rem', marginTop: '0.2rem' }}>
+          Impor & ekspor massal inventaris aset, unduh templat Excel resmi, cetak label stiker QR code, dan rekap buku inventaris.
         </p>
       </div>
 
-      {/* Group 1: Pencetakan & Label Fisik */}
+      {/* Group 1: Impor & Ekspor Data Spreadsheet (Utama) */}
       <div>
-        <h2 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Printer size={20} style={{ color: 'var(--color-primary)' }} /> 1. Pencetakan & Label Fisik
+        <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text)' }}>
+          <FileSpreadsheet size={20} style={{ color: 'var(--color-success)' }} />
+          1. Impor & Ekspor Data Inventaris (Excel / CSV)
         </h2>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem' }}>
-          {/* Tool 1: Pencetakan Label */}
-          <Card style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
+          {/* Tool A: Unduh Template Excel Resmi */}
+          <div className="spasi-card spasi-card-hover" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '1.05rem', marginBottom: '0.4rem' }}>
-                <Printer size={18} style={{ color: 'var(--color-primary-light)' }} /> Pencetakan Label Stiker Aset
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.05rem', marginBottom: '0.4rem', color: 'var(--color-success)' }}>
+                <FileCheck size={20} /> Unduh Templat Excel Resmi
               </div>
               <p style={{ color: 'var(--color-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                Cetak stiker label QR Code fisik berukuran A4 untuk ditempel pada barang inventaris instansi.
+                Unduh templat spreadsheet <strong>.xlsx</strong> resmi yang dilengkapi contoh pengisian dan lembar referensi kode kategori, subkategori, serta lokasi ruang.
               </p>
             </div>
-            <Link href="/dashboard/assets/qr-labels" className="btn btn-secondary" style={{ width: '100%' }}>
-              Buka Cetak Label QR Stiker
-            </Link>
-          </Card>
+            <a
+              href="/api/tools/template"
+              className="btn btn-secondary"
+              style={{
+                width: '100%',
+                textAlign: 'center',
+                borderColor: 'var(--color-success)',
+                color: 'var(--color-success)',
+                fontWeight: 700,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.4rem',
+              }}
+            >
+              <Download size={16} /> Unduh Template (.xlsx)
+            </a>
+          </div>
 
-          {/* Tool 2: Cetak Barcode / QR Unit Barang */}
-          <Card style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
+          {/* Tool B: Impor Data Massal Excel */}
+          <div className="spasi-card spasi-card-hover" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem', border: '1px solid rgba(79, 70, 229, 0.3)' }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '1.05rem', marginBottom: '0.4rem' }}>
-                <QrCode size={18} style={{ color: 'var(--color-success)' }} /> Cetak Barcode & QR Unit Barang
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.05rem', marginBottom: '0.4rem', color: 'var(--color-primary-light)' }}>
+                <Upload size={20} /> Impor Massal Aset (Excel / CSV)
               </div>
               <p style={{ color: 'var(--color-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                Cetak kode barcode 1D / QR Code individual per unit fisik barang lengkap dengan kode inventaris.
+                Unggah berkas Excel/CSV untuk mendaftarkan puluhan hingga ratusan aset inventaris sekaligus. Otomatis menghubungkan kategori, subkategori, dan lokasi.
               </p>
             </div>
-            <Link href="/dashboard/assets" className="btn btn-secondary" style={{ width: '100%' }}>
-              Pilih Unit Barang di Katalog
-            </Link>
-          </Card>
+            <Button
+              variant="primary"
+              onClick={() => openImportDialog('catalog')}
+              style={{ width: '100%', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+            >
+              <Upload size={16} /> Unggah File Excel Impor
+            </Button>
+          </div>
 
-          {/* Tool 3: Mencetak Buku Inventaris */}
-          <Card style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
+          {/* Tool C: Ekspor Lengkap Katalog Inventaris */}
+          <div className="spasi-card spasi-card-hover" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '1.05rem', marginBottom: '0.4rem' }}>
-                <BookOpen size={18} style={{ color: 'var(--color-warning)' }} /> Mencetak Buku Katalog Inventaris
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.05rem', marginBottom: '0.4rem', color: 'var(--color-text)' }}>
+                <Download size={20} style={{ color: 'var(--color-info)' }} /> Ekspor Katalog Lengkap (.xlsx)
               </div>
               <p style={{ color: 'var(--color-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                Cetak format buku rekapitulasi katalog aset lengkap dengan nilai perolehan, spesifikasi, dan lokasi.
+                Unduh seluruh data katalog aset terdaftar lengkap dengan kode tag, kategori, subkategori, merek, nomor seri, harga beli, dan status fisik.
               </p>
             </div>
-            <Link href="/dashboard/reports" className="btn btn-secondary" style={{ width: '100%' }}>
-              Cetak Buku Inventaris (PDF)
-            </Link>
-          </Card>
+            <a
+              href="/api/tools/export?type=catalog_excel"
+              className="btn btn-secondary"
+              style={{ width: '100%', textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+            >
+              <Download size={16} /> Unduh Data Katalog (.xlsx)
+            </a>
+          </div>
+
+          {/* Tool D: Ekspor Rincian Unit & Lokasi */}
+          <div className="spasi-card spasi-card-hover" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.05rem', marginBottom: '0.4rem', color: 'var(--color-text)' }}>
+                <Boxes size={20} style={{ color: '#F59E0B' }} /> Ekspor Unit & Lokasi Fisik (.xlsx)
+              </div>
+              <p style={{ color: 'var(--color-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
+                Unduh daftar rincian unit fisik barang lengkap dengan nomor seri/plat dan gedung/ruang penempatan untuk audit lapangan.
+              </p>
+            </div>
+            <a
+              href="/api/tools/export?type=items_excel"
+              className="btn btn-secondary"
+              style={{ width: '100%', textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+            >
+              <Download size={16} /> Unduh Unit & Lokasi (.xlsx)
+            </a>
+          </div>
+
+          {/* Tool E: Cadangan Data JSON */}
+          <div className="spasi-card spasi-card-hover" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.05rem', marginBottom: '0.4rem', color: 'var(--color-text)' }}>
+                <FileText size={20} style={{ color: '#A855F7' }} /> Cadangan Inventaris (JSON)
+              </div>
+              <p style={{ color: 'var(--color-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
+                Ekspor seluruh data katalog aset dalam format standar JSON untuk kebutuhan integrasi API dan cadangan data sistem.
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <a
+                href="/api/tools/export?type=catalog_json"
+                className="btn btn-secondary"
+                style={{ flex: 1, textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', fontSize: '0.82rem' }}
+              >
+                <Download size={14} /> Unduh JSON
+              </a>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => openImportDialog('json')}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+              >
+                <Upload size={14} /> Impor JSON
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Group 2: Ekspor & Impor Data Katalog Aset */}
+      {/* Group 2: Pencetakan Fisik, Label & Referensi */}
       <div>
-        <h2 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Database size={20} style={{ color: 'var(--color-warning)' }} /> 2. Ekspor & Impor Data Katalog Aset
+        <h2 style={{ fontSize: '1.2rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--color-text)' }}>
+          <Printer size={20} style={{ color: 'var(--color-primary-light)' }} />
+          2. Pencetakan Label Fisik & Master Data
         </h2>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem' }}>
-          {/* Tool 4: Ekspor Data Katalog Aset */}
-          <Card style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '1.25rem' }}>
+          {/* Cetak Label QR Stiker */}
+          <div className="spasi-card spasi-card-hover" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '1.05rem', marginBottom: '0.4rem' }}>
-                <FileSpreadsheet size={18} style={{ color: 'var(--color-success)' }} /> Ekspor Data Katalog (Excel / CSV)
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.05rem', marginBottom: '0.4rem', color: 'var(--color-text)' }}>
+                <QrCode size={20} style={{ color: 'var(--color-primary-light)' }} /> Cetak Label QR Code Stiker Masal
               </div>
               <p style={{ color: 'var(--color-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                Unduh seluruh data katalog aset dalam format spreadsheet `.xlsx` untuk analisis & cadangan.
+                Generator stiker label QR fisik berukuran A4 (2 kolom / 3 kolom Tom & Jerry / 4 kolom thermal) untuk ditempel pada unit barang.
               </p>
             </div>
-            <a href="/api/tools/export?type=biblio_excel" className="btn btn-secondary" style={{ width: '100%', textAlign: 'center' }}>
-              <Download size={16} /> Unduh Excel Katalog
-            </a>
-          </Card>
+            <Link
+              href="/dashboard/assets/qr-labels"
+              className="btn btn-secondary"
+              style={{ width: '100%', textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+            >
+              <Printer size={16} /> Buka Studio Cetak Label QR
+            </Link>
+          </div>
 
-          {/* Tool 5: Impor Data Katalog Aset */}
-          <Card style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
+          {/* Master Merek */}
+          <div className="spasi-card spasi-card-hover" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '1.05rem', marginBottom: '0.4rem' }}>
-                <Upload size={18} style={{ color: 'var(--color-primary-light)' }} /> Impor Data Katalog (Batch Excel)
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.05rem', marginBottom: '0.4rem', color: 'var(--color-text)' }}>
+                <Bookmark size={20} style={{ color: '#A855F7' }} /> Master Data Merek (Brand)
               </div>
               <p style={{ color: 'var(--color-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                Impor massal puluhan/ratusan aset baru secara instan dari templat berkas Excel `.xlsx` / `.csv`.
+                Kelola katalog merek standar industri (70+ merek) dan subkategori terkait untuk standardisasi penamaan aset.
               </p>
             </div>
-            <Button variant="primary" onClick={() => openImportDialog('biblio')}>
-              <Upload size={16} /> Unggah File Excel Katalog
-            </Button>
-          </Card>
+            <Link
+              href="/dashboard/brands"
+              className="btn btn-secondary"
+              style={{ width: '100%', textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+            >
+              <Bookmark size={16} /> Kelola Master Merek
+            </Link>
+          </div>
 
-          {/* Tool 6: Ekspor Format Standar JSON */}
-          <Card style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
+          {/* Rekap Buku Inventaris */}
+          <div className="spasi-card spasi-card-hover" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '1.05rem', marginBottom: '0.4rem' }}>
-                <FileText size={18} style={{ color: 'var(--color-info)' }} /> Ekspor Data Standar (JSON)
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 800, fontSize: '1.05rem', marginBottom: '0.4rem', color: 'var(--color-text)' }}>
+                <BookOpen size={20} style={{ color: '#F59E0B' }} /> Laporan & Buku Inventaris (PDF)
               </div>
               <p style={{ color: 'var(--color-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                Ekspor data inventaris sesuai format standar JSON untuk integrasi sistem antar instansi.
+                Cetak laporan rekapitulasi buku inventaris sarana & prasarana lengkap per unit instansi untuk laporan yayasan dan audit.
               </p>
             </div>
-            <a href="/api/tools/export?type=marc_json" className="btn btn-secondary" style={{ width: '100%', textAlign: 'center' }}>
-              <Download size={16} /> Unduh Data JSON
-            </a>
-          </Card>
-
-          {/* Tool 7: Impor Format Standar JSON */}
-          <Card style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '1.05rem', marginBottom: '0.4rem' }}>
-                <Upload size={18} style={{ color: 'var(--color-info)' }} /> Impor Data Standar (JSON)
-              </div>
-              <p style={{ color: 'var(--color-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                Impor rekaman data inventaris format JSON ke dalam database sistem SPASI.
-              </p>
-            </div>
-            <Button variant="secondary" onClick={() => openImportDialog('marc')}>
-              <Upload size={16} /> Unggah File JSON
-            </Button>
-          </Card>
+            <Link
+              href="/dashboard/reports"
+              className="btn btn-secondary"
+              style={{ width: '100%', textAlign: 'center', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
+            >
+              <BookOpen size={16} /> Buka Laporan & Rekapitulasi
+            </Link>
+          </div>
         </div>
       </div>
 
-      {/* Group 3: Data Rincian Unit Barang */}
-      <div>
-        <h2 style={{ fontSize: '1.15rem', fontWeight: 700, marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <Boxes size={20} style={{ color: 'var(--color-success)' }} /> 3. Kelola Data Rincian Unit Barang
-        </h2>
-
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '1.25rem' }}>
-          {/* Tool 8: Ekspor Data Unit Barang */}
-          <Card style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '1.05rem', marginBottom: '0.4rem' }}>
-                <FileSpreadsheet size={18} style={{ color: 'var(--color-success)' }} /> Ekspor Data Unit Barang
-              </div>
-              <p style={{ color: 'var(--color-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                Unduh rincian kondisi fisik, nomor seri, dan lokasi penempatan setiap unit barang.
-              </p>
-            </div>
-            <a href="/api/tools/export?type=items_excel" className="btn btn-secondary" style={{ width: '100%', textAlign: 'center' }}>
-              <Download size={16} /> Ekspor Data Unit (.xlsx)
-            </a>
-          </Card>
-
-          {/* Tool 9: Impor & Update Data Unit Barang */}
-          <Card style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', gap: '1rem' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700, fontSize: '1.05rem', marginBottom: '0.4rem' }}>
-                <Upload size={18} style={{ color: 'var(--color-warning)' }} /> Impor & Update Data Unit Barang
-              </div>
-              <p style={{ color: 'var(--color-muted)', fontSize: '0.85rem', lineHeight: 1.5 }}>
-                Update massal kondisi fisik, nomor seri, dan penempatan lokasi ruang unit barang dari Excel.
-              </p>
-            </div>
-            <Button variant="secondary" onClick={() => openImportDialog('items')}>
-              <Upload size={16} /> Update Data Unit Barang
-            </Button>
-          </Card>
-        </div>
-      </div>
-
-      {/* Import Modal Dialog */}
+      {/* Modal Dialog Impor Data */}
       <Modal
         isOpen={importModalOpen}
         onClose={() => setModalOpen(false)}
         title={
-          importType === 'biblio'
-            ? 'Impor Data Katalog Aset (Excel/CSV)'
-            : importType === 'marc'
-            ? 'Impor Data Standar (JSON)'
-            : 'Impor Data Rincian Unit Barang'
+          importType === 'json'
+            ? 'Impor Data Inventaris (Format JSON)'
+            : 'Impor Massal Aset dari File Excel / CSV'
         }
         footer={
-          <>
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', width: '100%' }}>
+            <Button variant="secondary" onClick={() => setModalOpen(false)} disabled={importing}>
               Batal
             </Button>
             <Button
               variant="primary"
-              isLoading={importing}
-              disabled={parsedData.length === 0}
+              disabled={parsedData.length === 0 || importing}
               onClick={handleExecuteImport}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
             >
-              Proses Impor ({parsedData.length} Baris)
+              {importing ? 'Memproses Impor...' : `Mulai Impor (${parsedData.length} Baris)`}
             </Button>
-          </>
+          </div>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-          <p style={{ color: 'var(--color-muted)', fontSize: '0.88rem', lineHeight: 1.5 }}>
-            Pilih berkas spreadsheet <strong>.xlsx / .csv</strong> atau <strong>.json</strong> dari komputer Anda. Sistem akan secara otomatis membaca dan memasukkan data aset ke database.
-          </p>
+          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', background: 'var(--color-surface2)', padding: '0.85rem 1rem', borderRadius: 'var(--radius-md)' }}>
+            <p style={{ color: 'var(--color-muted)', fontSize: '0.82rem', lineHeight: 1.5, margin: 0 }}>
+              Sistem akan secara otomatis mencocokkan <strong>Kategori, Subkategori, Merek, dan Lokasi Ruangan</strong> berdasarkan kolom di file Excel Anda.
+            </p>
+            <a
+              href="/api/tools/template"
+              style={{
+                fontSize: '0.78rem',
+                fontWeight: 700,
+                color: 'var(--color-primary-light)',
+                textDecoration: 'underline',
+                whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.25rem',
+              }}
+            >
+              <Download size={13} /> Unduh Template
+            </a>
+          </div>
 
+          {/* Area Upload File */}
           <div
             style={{
               border: '2px dashed var(--color-border)',
@@ -320,6 +376,7 @@ export default function ToolsUtilitasPage() {
               textAlign: 'center',
               backgroundColor: 'var(--color-surface2)',
               cursor: 'pointer',
+              transition: 'border-color 0.2s',
             }}
           >
             <input
@@ -330,31 +387,76 @@ export default function ToolsUtilitasPage() {
               id="file-upload-input"
             />
             <label htmlFor="file-upload-input" style={{ cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem' }}>
-              <Upload size={32} style={{ color: 'var(--color-primary-light)' }} />
-              <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>
-                {fileName ? `File Terpilih: ${fileName}` : 'Klik untuk Memilih Berkas Excel / CSV / JSON'}
+              <Upload size={36} style={{ color: 'var(--color-primary-light)' }} />
+              <span style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--color-text)' }}>
+                {fileName ? `File Terpilih: ${fileName}` : 'Klik untuk Memilih Berkas Excel (.xlsx, .csv, .json)'}
               </span>
               <span style={{ fontSize: '0.78rem', color: 'var(--color-muted)' }}>
-                Dukungan format: .xlsx, .csv, .json
+                Gunakan format templat resmi agar data terimpor dengan sempurna
               </span>
             </label>
           </div>
 
+          {/* Pratinjau Baris Data Terbaca */}
           {parsedData.length > 0 && (
-            <div
-              style={{
-                padding: '0.85rem 1rem',
-                borderRadius: 'var(--radius-md)',
-                backgroundColor: 'var(--color-success-bg)',
-                color: 'var(--color-success)',
-                fontSize: '0.88rem',
-                fontWeight: 600,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.5rem',
-              }}
-            >
-              <CheckCircle2 size={18} /> Berhasil membaca {parsedData.length} baris data siap impor!
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+              <div
+                style={{
+                  padding: '0.75rem 1rem',
+                  borderRadius: 'var(--radius-md)',
+                  backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  color: 'var(--color-success)',
+                  fontSize: '0.85rem',
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                }}
+              >
+                <CheckCircle2 size={18} /> Berhasil membaca {parsedData.length} baris data siap diproses!
+              </div>
+
+              {/* Tabel Pratinjau 3 Baris Pertama */}
+              <div style={{ maxHeight: '180px', overflowY: 'auto', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)' }}>
+                <table style={{ width: '100%', fontSize: '0.75rem', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <thead>
+                    <tr style={{ background: 'var(--color-surface2)', color: 'var(--color-muted)' }}>
+                      <th style={{ padding: '0.4rem 0.6rem' }}>Nama Aset</th>
+                      <th style={{ padding: '0.4rem 0.6rem' }}>Kategori</th>
+                      <th style={{ padding: '0.4rem 0.6rem' }}>Subkategori</th>
+                      <th style={{ padding: '0.4rem 0.6rem' }}>Merek</th>
+                      <th style={{ padding: '0.4rem 0.6rem' }}>Gedung/Ruang</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {parsedData.slice(0, 5).map((row, idx) => (
+                      <tr key={idx} style={{ borderTop: '1px solid var(--color-border)' }}>
+                        <td style={{ padding: '0.4rem 0.6rem', fontWeight: 600 }}>
+                          {row['Nama Aset *'] || row['Nama Aset / Sarana'] || row['Nama Aset'] || row.name || '-'}
+                        </td>
+                        <td style={{ padding: '0.4rem 0.6rem' }}>
+                          {row['Kode Kategori *'] || row['Kode Kategori'] || row['Kategori Utama'] || row.categoryCode || '-'}
+                        </td>
+                        <td style={{ padding: '0.4rem 0.6rem' }}>
+                          {row['Kode Subkategori'] || row['Subkategori'] || row.subCategoryCode || '-'}
+                        </td>
+                        <td style={{ padding: '0.4rem 0.6rem' }}>
+                          {row['Merek / Brand'] || row['Merek'] || row.brand || '-'}
+                        </td>
+                        <td style={{ padding: '0.4rem 0.6rem' }}>
+                          {row['Gedung / Lokasi'] || row['Gedung'] || row.building || '-'} {row['Ruangan'] || row['Ruang'] || row.room || ''}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {parsedData.length > 5 && (
+                <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', textAlign: 'right' }}>
+                  ...dan {parsedData.length - 5} baris data lainnya
+                </div>
+              )}
             </div>
           )}
         </div>

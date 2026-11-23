@@ -12,6 +12,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { useCart } from '@/components/public/CartContext';
 import { formatCurrency } from '@/lib/utils';
+import { parseFacilities } from '@/lib/roomConstants';
 import {
   Building2, Box, Search, Users, ShieldCheck,
   ArrowRight, Sparkles, Filter, ShoppingBag, Plus, Check, CreditCard, CalendarCheck
@@ -26,9 +27,14 @@ export default function DashboardCatalogPage() {
   const [activeTab, setActiveTab] = useState<'rooms' | 'assets'>('rooms');
   const [rooms, setRooms] = useState<any[]>([]);
   const [assets, setAssets] = useState<any[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [brands, setBrands] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBuilding, setSelectedBuilding] = useState('ALL');
+  const [parentCategoryFilter, setParentCategoryFilter] = useState('ALL');
+  const [subCategoryFilter, setSubCategoryFilter] = useState('ALL');
+  const [brandFilter, setBrandFilter] = useState('ALL');
 
   useEffect(() => {
     fetchData();
@@ -37,13 +43,23 @@ export default function DashboardCatalogPage() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [roomsRes, assetsRes] = await Promise.all([
+      const [roomsRes, assetsRes, catsRes, brandsRes] = await Promise.all([
         fetch('/api/rooms?status=AVAILABLE'),
         fetch('/api/public/assets?status=AVAILABLE'),
+        fetch('/api/public/categories'),
+        fetch('/api/brands?detail=true'),
       ]);
 
       if (roomsRes.ok) setRooms(await roomsRes.json());
       if (assetsRes.ok) setAssets(await assetsRes.json());
+      if (catsRes.ok) {
+        const catsData = await catsRes.json();
+        setCategories(Array.isArray(catsData) ? catsData : catsData.categories || []);
+      }
+      if (brandsRes.ok) {
+        const brandsData = await brandsRes.json();
+        setBrands(Array.isArray(brandsData) ? brandsData : brandsData.brands || []);
+      }
     } catch (e) {
       console.error(e);
     } finally {
@@ -114,10 +130,41 @@ export default function DashboardCatalogPage() {
     return matchesSearch && matchesBuilding;
   });
 
+  const parentCategories = categories.filter((c) => !c.parentId);
+  const activeParentCategory = parentCategories.find((c) => c.id === parentCategoryFilter);
+  const subCategories = activeParentCategory?.children || categories.filter((c) => c.parentId === parentCategoryFilter);
+
+  const availableBrandNames = Array.from(
+    new Set([
+      ...brands.map((b) => b.name).filter(Boolean),
+      ...assets.map((a) => a.brand).filter(Boolean),
+    ])
+  ).sort((a, b) => a.localeCompare(b));
+
   const filteredAssets = assets.filter((a) => {
-    return a.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-           a.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-           a.category?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const q = searchQuery.toLowerCase();
+    const matchesSearch =
+      !q ||
+      a.name?.toLowerCase().includes(q) ||
+      a.code?.toLowerCase().includes(q) ||
+      a.brand?.toLowerCase().includes(q) ||
+      a.category?.name?.toLowerCase().includes(q) ||
+      a.category?.parent?.name?.toLowerCase().includes(q);
+
+    const matchesParent =
+      parentCategoryFilter === 'ALL' ||
+      a.categoryId === parentCategoryFilter ||
+      a.category?.parentId === parentCategoryFilter ||
+      a.category?.parent?.id === parentCategoryFilter;
+
+    const matchesSub =
+      subCategoryFilter === 'ALL' || a.categoryId === subCategoryFilter;
+
+    const matchesBrand =
+      brandFilter === 'ALL' ||
+      (a.brand || '').toLowerCase() === brandFilter.toLowerCase();
+
+    return matchesSearch && matchesParent && matchesSub && matchesBrand;
   });
 
   return (
@@ -226,6 +273,66 @@ export default function DashboardCatalogPage() {
               ))}
             </div>
           )}
+
+          {activeTab === 'assets' && (
+            <div style={{ display: 'flex', gap: '0.65rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <select
+                className="input-field"
+                value={parentCategoryFilter}
+                onChange={(e) => {
+                  setParentCategoryFilter(e.target.value);
+                  setSubCategoryFilter('ALL');
+                }}
+                style={{ minWidth: '170px', padding: '0.45rem 0.75rem', fontSize: '0.84rem' }}
+              >
+                <option value="ALL">Semua Kategori Utama</option>
+                {parentCategories.map((c) => (
+                  <option key={c.id} value={c.id}>{c.name}</option>
+                ))}
+              </select>
+
+              {parentCategoryFilter !== 'ALL' && subCategories.length > 0 && (
+                <select
+                  className="input-field"
+                  value={subCategoryFilter}
+                  onChange={(e) => setSubCategoryFilter(e.target.value)}
+                  style={{ minWidth: '170px', padding: '0.45rem 0.75rem', fontSize: '0.84rem' }}
+                >
+                  <option value="ALL">Semua Subkategori</option>
+                  {subCategories.map((sc: any) => (
+                    <option key={sc.id} value={sc.id}>{sc.name}</option>
+                  ))}
+                </select>
+              )}
+
+              <select
+                className="input-field"
+                value={brandFilter}
+                onChange={(e) => setBrandFilter(e.target.value)}
+                style={{ minWidth: '150px', padding: '0.45rem 0.75rem', fontSize: '0.84rem' }}
+              >
+                <option value="ALL">Semua Merek</option>
+                {availableBrandNames.map((b) => (
+                  <option key={b} value={b}>{b}</option>
+                ))}
+              </select>
+
+              {(parentCategoryFilter !== 'ALL' || subCategoryFilter !== 'ALL' || brandFilter !== 'ALL' || searchQuery) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setParentCategoryFilter('ALL');
+                    setSubCategoryFilter('ALL');
+                    setBrandFilter('ALL');
+                  }}
+                  className="btn btn-sm btn-secondary"
+                >
+                  Reset Filter
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </Card>
 
@@ -241,7 +348,7 @@ export default function DashboardCatalogPage() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1.5rem' }}>
             {filteredRooms.map((room) => {
               const photos = typeof room.photos === 'string' ? JSON.parse(room.photos || '[]') : (room.photos || []);
-              const facilities = typeof room.facilities === 'string' ? JSON.parse(room.facilities || '[]') : (room.facilities || []);
+              const facilities = parseFacilities(room.facilities);
               const coverPhoto = photos[0] || 'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800&auto=format&fit=crop';
 
               return (
@@ -283,7 +390,7 @@ export default function DashboardCatalogPage() {
 
                       {facilities.length > 0 && (
                         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '1.25rem' }}>
-                          {facilities.slice(0, 4).map((f: string, idx: number) => (
+                          {facilities.slice(0, 4).map((f, idx: number) => (
                             <span
                               key={idx}
                               style={{
@@ -295,7 +402,7 @@ export default function DashboardCatalogPage() {
                                 fontWeight: 600,
                               }}
                             >
-                              ✓ {f}
+                              ✓ {f.name}{f.qty > 1 ? ` (${f.qty})` : ''}
                             </span>
                           ))}
                         </div>
@@ -467,10 +574,36 @@ export default function DashboardCatalogPage() {
                   <div style={{ padding: '1.25rem', flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
-                        <h3 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '0.35rem' }}>{ast.name}</h3>
+                        <h3 style={{ fontSize: '1.15rem', fontWeight: 800, marginBottom: '0.45rem' }}>{ast.name}</h3>
                       </div>
-                      <div style={{ fontSize: '0.82rem', color: 'var(--color-muted)', marginBottom: '0.75rem' }}>
-                        Kategori: {ast.category?.name || 'Aset Moving'} • Merek: {ast.brand || '-'}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.35rem', marginBottom: '0.75rem' }}>
+                        <span
+                          className="badge"
+                          style={{
+                            background: 'rgba(14, 165, 233, 0.12)',
+                            color: '#0284c7',
+                            fontSize: '0.72rem',
+                            fontWeight: 600,
+                          }}
+                        >
+                          {ast.category?.parent?.name
+                            ? `${ast.category.parent.name} › ${ast.category.name}`
+                            : (ast.category?.name || 'Aset Moving')}
+                        </span>
+                        {ast.brand && (
+                          <span
+                            className="badge"
+                            style={{
+                              background: 'var(--color-surface2)',
+                              color: 'var(--color-text)',
+                              border: '1px solid var(--color-border)',
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {ast.brand}
+                          </span>
+                        )}
                       </div>
 
                       <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)', lineHeight: 1.4, marginBottom: '0.75rem', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>

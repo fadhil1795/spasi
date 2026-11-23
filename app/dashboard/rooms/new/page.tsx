@@ -7,19 +7,18 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
-import { ArrowLeft, Plus, X } from 'lucide-react';
+import { ROOM_TYPES } from '@/lib/roomConstants';
+import { RoomAssetSelector, RoomAssetAllocItem } from '@/components/rooms/RoomAssetSelector';
+import { RoomPrimaryInfoSection } from '@/components/rooms/RoomPrimaryInfoSection';
+import { ArrowLeft, Plus, X, UploadCloud, Image as ImageIcon, Loader2, Sparkles } from 'lucide-react';
 
-const FACILITIES_LIST = [
-  'AC',
-  'Proyektor',
-  'Smart TV',
-  'Sound System',
-  'WiFi',
-  'Whiteboard',
-  'Podium',
-  'Panggung',
-  'Kamera CCTV',
-  'Toilet',
+const BUILDING_UTILITIES_LIST = [
+  'WiFi / Internet Kampus',
+  'Toilet Dalam',
+  'Panggung Permanen',
+  'AC Sentral Gedung',
+  'Akses Kursi Roda / Lift',
+  'Area Parkir Khusus',
 ];
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
@@ -76,11 +75,16 @@ export default function NewRoomPage() {
   // Section A - Informasi Utama
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
+  const [roomType, setRoomType] = useState('CLASSROOM');
+  const [buildingId, setBuildingId] = useState('');
   const [building, setBuilding] = useState('');
-  const [floor, setFloor] = useState('');
+  const [floor, setFloor] = useState('1');
   const [areaName, setAreaName] = useState('');
   const [departmentId, setDepartmentId] = useState('');
+  const [picName, setPicName] = useState('');
+  const [picPhone, setPicPhone] = useState('');
   const [departments, setDepartments] = useState<any[]>([]);
+  const [buildingsList, setBuildingsList] = useState<any[]>([]);
   const [existingBuildings, setExistingBuildings] = useState<string[]>([]);
 
   // Section B - Spesifikasi
@@ -98,49 +102,89 @@ export default function NewRoomPage() {
 
   const [facilities, setFacilities] = useState<string[]>([]);
 
-  // Section D.2 - Aset Fisik
-  const [availableAssets, setAvailableAssets] = useState<any[]>([]);
-  const [assetIds, setAssetIds] = useState<string[]>([]);
+  // Section D.2 - Aset Fisik Terpasang (dengan jumlah)
+  const [assetAllocations, setAssetAllocations] = useState<RoomAssetAllocItem[]>([]);
 
   // Section E - Foto
-  const [photos, setPhotos] = useState<string[]>(['']);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [photoUrlInput, setPhotoUrlInput] = useState('');
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
 
   // Section F - Status
   const [status, setStatus] = useState('AVAILABLE');
 
   React.useEffect(() => {
     Promise.all([
-      fetch('/api/assets?locationId=none').then((r) => r.json()).catch(() => []),
       fetch('/api/rooms').then((r) => r.json()).catch(() => []),
       fetch('/api/departments').then((r) => r.json()).catch(() => []),
-    ]).then(([assetsData, roomsData, deptsData]) => {
-      if (Array.isArray(assetsData)) setAvailableAssets(assetsData);
+      fetch('/api/buildings').then((r) => r.json()).catch(() => []),
+    ]).then(([roomsData, deptsData, bData]) => {
       if (Array.isArray(roomsData)) {
         const buildings = Array.from(new Set(roomsData.map((r: any) => r.building).filter(Boolean))) as string[];
         setExistingBuildings(buildings);
       }
       if (Array.isArray(deptsData)) setDepartments(deptsData);
+      if (Array.isArray(bData)) setBuildingsList(bData);
     });
   }, []);
 
-  const toggleFacility = (fac: string) => {
+  const toggleFacility = (facName: string) => {
     setFacilities((prev) =>
-      prev.includes(fac) ? prev.filter((f) => f !== fac) : [...prev, fac]
+      prev.includes(facName) ? prev.filter((f) => f !== facName) : [...prev, facName]
     );
   };
 
-  const toggleAsset = (id: string) => {
-    setAssetIds((prev) =>
-      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
-    );
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    try {
+      setUploadingPhotos(true);
+      const uploadedUrls: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (!file.type.startsWith('image/')) {
+          showToast(`Berkas "${file.name}" bukan gambar valid. Lewati.`, 'warning');
+          continue;
+        }
+
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', file);
+        uploadFormData.append('folder', 'rooms');
+
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: uploadFormData,
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.url) uploadedUrls.push(data.url);
+        } else {
+          const err = await res.json();
+          showToast(`Gagal mengunggah ${file.name}: ${err.error || 'Terjadi kesalahan'}`, 'error');
+        }
+      }
+
+      if (uploadedUrls.length > 0) {
+        setPhotos((prev) => [...prev, ...uploadedUrls]);
+        showToast(`Berhasil mengunggah ${uploadedUrls.length} foto ruangan!`, 'success');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Terjadi kesalahan jaringan saat mengunggah foto', 'error');
+    } finally {
+      setUploadingPhotos(false);
+      e.target.value = '';
+    }
   };
 
-  const handleAddPhoto = () => {
-    if (photos.length < 8) setPhotos((prev) => [...prev, '']);
-  };
-
-  const handlePhotoChange = (idx: number, val: string) => {
-    setPhotos((prev) => prev.map((p, i) => (i === idx ? val : p)));
+  const handleAddPhotoUrl = () => {
+    const url = photoUrlInput.trim();
+    if (!url) return;
+    setPhotos((prev) => [...prev, url]);
+    setPhotoUrlInput('');
   };
 
   const handleRemovePhoto = (idx: number) => {
@@ -154,8 +198,8 @@ export default function NewRoomPage() {
       showToast('Nama Ruangan wajib diisi.', 'error');
       return;
     }
-    if (!building.trim()) {
-      showToast('Nama Gedung wajib diisi.', 'error');
+    if (!buildingId && !building.trim()) {
+      showToast('Gedung wajib dipilih atau diisi.', 'error');
       return;
     }
 
@@ -164,10 +208,14 @@ export default function NewRoomPage() {
       const payload = {
         code: code.trim() || null,
         name: name.trim(),
+        roomType,
+        buildingId: buildingId || null,
         building: building.trim(),
         floor: floor.trim() || null,
-        areaName: areaName.trim() || null,
+        room: areaName.trim() || null,
         departmentId: departmentId || null,
+        picName: picName.trim() || null,
+        picPhone: picPhone.trim() || null,
         area: area ? parseFloat(area) : null,
         capacity: capacity ? parseInt(capacity) : null,
         description: description.trim() || null,
@@ -178,7 +226,7 @@ export default function NewRoomPage() {
         isLoanable,
         requiresDepositForInternal,
         facilities,
-        assetIds,
+        assetAllocations: assetAllocations.map(({ assetId, quantity }) => ({ assetId, quantity })),
         photos: photos.filter((p) => p.trim() !== ''),
         status,
       };
@@ -228,96 +276,34 @@ export default function NewRoomPage() {
       </div>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
-        {/* Section A - Informasi Utama */}
-        <Card style={{ padding: '1.5rem' }}>
-          <SectionTitle>A — Informasi Utama</SectionTitle>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 2fr',
-              gap: '1rem',
-              marginBottom: '1rem',
-            }}
-          >
-            <Input
-              label="Kode Ruangan (opsional)"
-              placeholder="RNG-001"
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              style={{ marginBottom: 0 }}
-            />
-            <Input
-              label="Nama Ruangan *"
-              placeholder="Aula Utama Gedung A"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              style={{ marginBottom: 0 }}
-            />
-          </div>
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '2fr 1fr 2fr',
-              gap: '1rem',
-              marginBottom: '1rem',
-            }}
-          >
-            <div>
-              <FormLabel required>Gedung</FormLabel>
-              <input
-                type="text"
-                list="building-suggestions"
-                className="input-field"
-                placeholder="Pilih atau ketik Gedung..."
-                value={building}
-                onChange={(e) => setBuilding(e.target.value)}
-                style={{ width: '100%' }}
-                required
-              />
-              <datalist id="building-suggestions">
-                {existingBuildings.map((b, idx) => (
-                  <option key={idx} value={b} />
-                ))}
-              </datalist>
-            </div>
-
-            <Input
-              label="Lantai"
-              placeholder="1"
-              value={floor}
-              onChange={(e) => setFloor(e.target.value)}
-              style={{ marginBottom: 0 }}
-            />
-            <Input
-              label="Nama Ruang / Area"
-              placeholder="Aula, Ruang Rapat, dll."
-              value={areaName}
-              onChange={(e) => setAreaName(e.target.value)}
-              style={{ marginBottom: 0 }}
-            />
-          </div>
-
-          <div style={{ marginBottom: '0.5rem' }}>
-            <FormLabel>Fakultas / Unit Pengelola Ruangan</FormLabel>
-            <select
-              className="input-field"
-              value={departmentId}
-              onChange={(e) => setDepartmentId(e.target.value)}
-              style={{ width: '100%' }}
-            >
-              <option value="">-- Dikelola Umum / Pusat --</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} ({d.code})
-                </option>
-              ))}
-            </select>
-            <p style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginTop: '0.25rem' }}>
-              Pilih unit atau fakultas yang memiliki hak otorisasi dan pengelolaan atas ruangan ini.
-            </p>
-          </div>
-        </Card>
+        {/* Section A - Informasi Utama & Standarisasi Penamaan */}
+        <RoomPrimaryInfoSection
+          data={{
+            code,
+            name,
+            roomType,
+            buildingId,
+            building,
+            floor,
+            room: areaName,
+            departmentId,
+            picName,
+            picPhone,
+          }}
+          onChange={(next) => {
+            setCode(next.code);
+            setName(next.name);
+            setRoomType(next.roomType);
+            setBuildingId(next.buildingId);
+            setBuilding(next.building);
+            setFloor(next.floor);
+            setAreaName(next.room);
+            setDepartmentId(next.departmentId);
+            setPicName(next.picName);
+            setPicPhone(next.picPhone);
+          }}
+          autoNamingDefault={true}
+        />
 
         {/* Section B - Spesifikasi */}
         <Card style={{ padding: '1.5rem' }}>
@@ -439,29 +425,32 @@ export default function NewRoomPage() {
           </div>
         </Card>
 
-        {/* Section D - Fasilitas */}
+        {/* Section D - Utilitas Bangunan & Aset Terpasang */}
         <Card style={{ padding: '1.5rem' }}>
-          <SectionTitle>D — Fasilitas & Aset Ruangan</SectionTitle>
+          <SectionTitle>D — Aset &amp; Perlengkapan Ruangan</SectionTitle>
 
           <div style={{ marginBottom: '1.5rem' }}>
-            <FormLabel>Fasilitas Ruangan</FormLabel>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-              {FACILITIES_LIST.map((item) => {
+            <FormLabel>Utilitas Bangunan Permanen (Non-Aset)</FormLabel>
+            <p style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginBottom: '0.65rem' }}>
+              Pilih atribut bawaan gedung yang melekat permanen (bukan barang inventaris lepas).
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {BUILDING_UTILITIES_LIST.map((item) => {
                 const checked = facilities.includes(item);
                 return (
                   <label
                     key={item}
                     style={{
-                      display: 'flex',
+                      display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '0.5rem',
+                      gap: '0.45rem',
                       cursor: 'pointer',
-                      fontSize: '0.88rem',
-                      padding: '0.4rem 0.6rem',
+                      fontSize: '0.84rem',
+                      padding: '0.4rem 0.75rem',
                       border: '1px solid',
                       borderColor: checked ? 'var(--color-primary)' : 'var(--color-border)',
-                      background: checked ? 'rgba(79, 70, 229, 0.04)' : 'transparent',
-                      borderRadius: 'var(--radius-sm)',
+                      background: checked ? 'rgba(79, 70, 229, 0.08)' : 'transparent',
+                      borderRadius: 'var(--radius-pill)',
                       transition: 'all 0.2s',
                     }}
                   >
@@ -479,112 +468,177 @@ export default function NewRoomPage() {
           </div>
 
           <div>
-            <FormLabel>Aset Fisik Terpasang (Terintegrasi ke Data Aset)</FormLabel>
+            <FormLabel>Aset Fisik Terpasang (Terintegrasi ke Master Data Aset)</FormLabel>
             <p style={{ fontSize: '0.8rem', color: 'var(--color-muted)', marginBottom: '0.8rem' }}>
-              Pilih aset fisik aktual (yang belum ditempatkan) untuk langsung dipindahkan lokasinya ke ruangan ini.
+              Pilih kategori dan aset yang akan ditempatkan ke ruangan ini, lalu tentukan jumlah unitnya.
             </p>
-            {availableAssets.length === 0 ? (
-              <div style={{ padding: '1rem', background: 'var(--color-surface2)', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', color: 'var(--color-muted)' }}>
-                Tidak ada aset fisik nganggur yang tersedia.
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '0.6rem' }}>
-                {availableAssets.map((asset) => {
-                  const active = assetIds.includes(asset.id);
-                  return (
-                    <div
-                      key={asset.id}
-                      onClick={() => toggleAsset(asset.id)}
-                      style={{
-                        padding: '0.75rem',
-                        border: '1px solid',
-                        borderColor: active ? 'var(--color-primary)' : 'var(--color-border)',
-                        background: active ? 'rgba(79, 70, 229, 0.08)' : 'var(--color-surface)',
-                        borderRadius: 'var(--radius-md)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.8rem',
-                        transition: 'all 0.2s',
-                      }}
-                    >
-                      <input 
-                        type="checkbox" 
-                        checked={active} 
-                        readOnly 
-                        style={{ cursor: 'pointer', accentColor: 'var(--color-primary)' }} 
-                      />
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{asset.name}</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)' }}>SN: {asset.serialNumber || '-'} | {asset.code}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <RoomAssetSelector
+              allocations={assetAllocations}
+              onChange={setAssetAllocations}
+            />
           </div>
         </Card>
 
-        {/* Section E - Foto */}
+        {/* Section E - Foto Ruangan */}
         <Card style={{ padding: '1.5rem' }}>
-          <SectionTitle>E — Foto Ruangan</SectionTitle>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-            {photos.map((url, idx) => (
-              <div key={idx} style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                <input
-                  className="input-field"
-                  type="url"
-                  placeholder={`URL Foto ${idx + 1} (https://...)`}
-                  value={url}
-                  onChange={(e) => handlePhotoChange(idx, e.target.value)}
-                  style={{ flex: 1 }}
-                />
-                {photos.length > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => handleRemovePhoto(idx)}
-                    style={{
-                      padding: '0.55rem',
-                      background: 'var(--color-danger-bg)',
-                      color: 'var(--color-danger)',
-                      border: '1px solid rgba(239, 68, 68, 0.3)',
-                      borderRadius: 'var(--radius-sm)',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                    title="Hapus foto"
-                  >
-                    <X size={15} />
-                  </button>
-                )}
-              </div>
-            ))}
-          </div>
-          {photos.length < 8 && (
-            <button
-              type="button"
-              onClick={handleAddPhoto}
+          <SectionTitle>E — Dokumentasi Foto Ruangan</SectionTitle>
+          <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)', marginTop: '-0.5rem', marginBottom: '0.85rem' }}>
+            Unggah foto fisik ruangan (tampak depan, interior, panggung, fasilitas proyektor, sudut ruangan).
+          </p>
+
+          {/* Area Unggah Berkas Foto (Multiple Upload) */}
+          <div
+            style={{
+              border: '2px dashed var(--color-border)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '1.75rem 1rem',
+              textAlign: 'center',
+              background: 'var(--color-surface2)',
+              cursor: uploadingPhotos ? 'not-allowed' : 'pointer',
+              position: 'relative',
+              transition: 'all 0.2s',
+            }}
+          >
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              disabled={uploadingPhotos}
+              onChange={handleFileUpload}
               style={{
-                marginTop: '0.75rem',
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '0.4rem',
-                fontSize: '0.85rem',
-                fontWeight: 600,
-                color: 'var(--color-primary-light)',
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                padding: '0.25rem 0',
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                opacity: 0,
+                cursor: uploadingPhotos ? 'not-allowed' : 'pointer',
               }}
-            >
-              <Plus size={15} /> Tambah Foto (maks. 8)
-            </button>
+            />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.6rem', pointerEvents: 'none' }}>
+              <div
+                style={{
+                  width: '46px',
+                  height: '46px',
+                  borderRadius: '50%',
+                  background: 'rgba(79, 70, 229, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--color-primary-light)',
+                }}
+              >
+                {uploadingPhotos ? <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} /> : <UploadCloud size={24} />}
+              </div>
+              <div>
+                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-text)' }}>
+                  {uploadingPhotos ? 'Sedang mengunggah foto ruangan...' : 'Klik untuk Pilih Foto atau Seret ke Sini'}
+                </span>
+                <p style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginTop: '0.2rem' }}>
+                  Bisa pilih beberapa foto sekaligus (JPG, PNG, WebP hingga 10MB/foto)
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Grid Preview Foto Terunggah */}
+          {photos.length > 0 && (
+            <div style={{ marginTop: '1rem' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-muted)', marginBottom: '0.6rem' }}>
+                Foto Ruangan ({photos.length} foto):
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+                  gap: '0.75rem',
+                }}
+              >
+                {photos.map((url, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      position: 'relative',
+                      borderRadius: 'var(--radius-md)',
+                      overflow: 'hidden',
+                      border: idx === 0 ? '2px solid var(--color-primary-light)' : '1px solid var(--color-border)',
+                      aspectRatio: '16/10',
+                      background: '#0f172a',
+                    }}
+                  >
+                    <img
+                      src={url}
+                      alt={`Foto Ruangan ${idx + 1}`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                    {idx === 0 && (
+                      <span
+                        style={{
+                          position: 'absolute',
+                          bottom: '4px',
+                          left: '4px',
+                          fontSize: '0.65rem',
+                          fontWeight: 700,
+                          background: 'var(--color-primary)',
+                          color: '#fff',
+                          padding: '0.1rem 0.4rem',
+                          borderRadius: '3px',
+                        }}
+                      >
+                        Sampul Utama
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(idx)}
+                      style={{
+                        position: 'absolute',
+                        top: '4px',
+                        right: '4px',
+                        width: '22px',
+                        height: '22px',
+                        borderRadius: '50%',
+                        background: 'rgba(0, 0, 0, 0.7)',
+                        color: '#ef4444',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s',
+                      }}
+                      title="Hapus foto ini"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
           )}
+
+          {/* Opsi Collapse URL Eksternal */}
+          <details style={{ marginTop: '0.5rem', fontSize: '0.78rem', color: 'var(--color-muted)' }}>
+            <summary style={{ cursor: 'pointer', userSelect: 'none' }}>
+              Atau masukkan tautan URL gambar eksternal...
+            </summary>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.4rem' }}>
+              <input
+                className="input-field"
+                style={{ flex: 1, fontSize: '0.8rem', height: '34px' }}
+                placeholder="https://..."
+                value={photoUrlInput}
+                onChange={(e) => setPhotoUrlInput(e.target.value)}
+              />
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleAddPhotoUrl}
+              >
+                Tambah URL
+              </button>
+            </div>
+          </details>
         </Card>
 
         {/* Section F - Status */}

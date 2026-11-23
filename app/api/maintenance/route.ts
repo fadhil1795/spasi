@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthSession } from '@/lib/auth';
+import { recordAuditLog } from '@/lib/audit';
 
 export const dynamic = 'force-dynamic';
 
@@ -128,6 +129,16 @@ export async function POST(request: Request) {
         });
       }
     }
+
+    await recordAuditLog({
+      action: 'CREATE_MAINTENANCE',
+      entity: 'Maintenance',
+      entityId: record.id,
+      userId: (session.user as any).id,
+      details: `Mencatat pekerjaan maintenance (${record.type}): ${record.description}`,
+      oldData: null,
+      newData: record,
+    });
 
     return NextResponse.json(record, { status: 201 });
   } catch (error: any) {

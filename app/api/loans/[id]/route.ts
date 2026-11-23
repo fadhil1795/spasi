@@ -29,7 +29,28 @@ export async function GET(
       return NextResponse.json({ error: 'Loan request not found' }, { status: 404 });
     }
 
-    return NextResponse.json(loan);
+    const createdMs = new Date(loan.createdAt).getTime();
+    const groupLoans = await prisma.loan.findMany({
+      where: loan.groupCode
+        ? { groupCode: loan.groupCode }
+        : {
+            userId: loan.userId,
+            startDate: loan.startDate,
+            endDate: loan.endDate,
+            purpose: loan.purpose,
+            createdAt: {
+              gte: new Date(createdMs - 5000),
+              lte: new Date(createdMs + 5000),
+            },
+          },
+      include: {
+        asset: { include: { category: true, location: true } },
+        handoverLog: true,
+      },
+      orderBy: { ticketNumber: 'asc' },
+    });
+
+    return NextResponse.json({ ...loan, groupLoans });
   } catch (error) {
     return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
   }

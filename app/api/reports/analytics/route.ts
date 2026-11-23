@@ -10,6 +10,10 @@ export async function GET(request: Request) {
     if (!session) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
+    const userRole = (session.user as any)?.role || 'BORROWER';
+    if (!['SUPER_ADMIN', 'ADMIN', 'APPROVER'].includes(userRole)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    }
 
     const { searchParams } = new URL(request.url);
     const format = searchParams.get('format');
@@ -191,6 +195,50 @@ export async function GET(request: Request) {
     const activeViolationsCount = await prisma.violation.count();
     const suspendedUsersCount = await prisma.user.count({ where: { isSuspended: true } });
 
+    // ─── CONSUMABLES (BARANG HABIS PAKAI / ATK) RECAP ────────────────────────────
+    const [consumablesMaster, consumableTransactions] = await Promise.all([
+      prisma.consumable.findMany({
+        select: { id: true, code: true, name: true, brand: true, unit: true, stock: true, minimumStock: true, unitCost: true },
+      }),
+      prisma.consumableTransaction.findMany({
+        where: { transactionDate: { gte: dateStart, lte: dateEnd } },
+        include: {
+          consumable: { select: { id: true, code: true, name: true, brand: true, unit: true } },
+        },
+        orderBy: { transactionDate: 'desc' },
+        take: 200,
+      }),
+    ]);
+
+    let totalConsumableSpend = 0;
+    let totalConsumableInQty = 0;
+    let totalConsumableOutQty = 0;
+    let consumableInCount = 0;
+    let consumableOutCount = 0;
+
+    consumableTransactions.forEach((t) => {
+      if (t.type === 'IN') {
+        consumableInCount++;
+        totalConsumableInQty += t.quantity || 0;
+        const cost = t.totalCost ?? (t.unitCost ? t.unitCost * t.quantity : 0);
+        totalConsumableSpend += cost || 0;
+      } else {
+        consumableOutCount++;
+        totalConsumableOutQty += t.quantity || 0;
+      }
+    });
+
+    const consumablesSummary = {
+      totalItems: consumablesMaster.length,
+      lowStockCount: consumablesMaster.filter((c) => c.stock <= c.minimumStock).length,
+      totalStockValue: consumablesMaster.reduce((s, c) => s + (c.stock || 0) * (c.unitCost || 0), 0),
+      totalSpend: totalConsumableSpend,
+      totalInQty: totalConsumableInQty,
+      totalOutQty: totalConsumableOutQty,
+      inCount: consumableInCount,
+      outCount: consumableOutCount,
+    };
+
     return NextResponse.json({
       summary: {
         totalRevenue,
@@ -217,6 +265,8 @@ export async function GET(request: Request) {
       roomBookings,
       assetRentals,
       mostBorrowedAssets,
+      consumablesSummary,
+      consumableTransactions,
     });
   } catch (error) {
     console.error('Financial Analytics API Error:', error);

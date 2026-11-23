@@ -6,6 +6,9 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import { signOut, useSession } from 'next-auth/react';
 import {
   LayoutDashboard,
+  HelpCircle,
+  ArrowRightLeft,
+  Activity,
   Box,
   Tag,
   Wrench,
@@ -39,6 +42,7 @@ import {
   MessageSquare,
   ShoppingBag,
   Package,
+  Bookmark,
 } from 'lucide-react';
 
 interface SubMenuItem {
@@ -96,6 +100,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
       items: [
         { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
         { label: 'Katalog Fasilitas', href: '/dashboard/catalog', icon: Building2 },
+        { label: 'Panduan Penggunaan', href: '/guide', icon: HelpCircle },
       ]
     },
     {
@@ -125,9 +130,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
       items: [
         { label: 'Data Aset', href: '/dashboard/assets', icon: Box, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
         { label: 'Data Ruangan', href: '/dashboard/rooms', icon: Building2, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
+        { label: 'Gedung & Unit Fakultas', href: '/dashboard/buildings', icon: Building2, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
+        { label: 'Mutasi Aset', href: '/dashboard/transfers', icon: ArrowRightLeft, roles: ['SUPER_ADMIN', 'ADMIN', 'APPROVER', 'STAFF'] },
         { label: 'Stock Opname QR', href: '/dashboard/stock-opname', icon: QrCode, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
         { label: 'Pengadaan Aset', href: '/dashboard/procurement', icon: ShoppingBag, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
-        { label: 'Barang Habis Pakai', href: '/dashboard/consumables', icon: Package, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
+        {
+          label: 'Barang Habis Pakai',
+          href: '/dashboard/consumables',
+          icon: Package,
+          roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'],
+          children: [
+            { label: 'Stok & Transaksi ATK', href: '/dashboard/consumables', icon: Package, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
+            { label: 'Import ATK', href: '/dashboard/consumables?action=import', icon: FileSpreadsheet, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
+          ],
+        },
         { label: 'Maintenance & Servis', href: '/dashboard/maintenance', icon: Wrench, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
       ]
     },
@@ -146,13 +162,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
       items: [
         { label: 'Laporan & Rekapitulasi', href: '/dashboard/reports', icon: FileSpreadsheet, roles: ['SUPER_ADMIN', 'ADMIN', 'APPROVER'] },
         { label: 'Kategori & Klasifikasi', href: '/dashboard/categories', icon: Tag, roles: ['SUPER_ADMIN', 'ADMIN'] },
+        { label: 'Master Data Merek', href: '/dashboard/brands', icon: Bookmark, roles: ['SUPER_ADMIN', 'ADMIN', 'STAFF'] },
         { label: 'Utilitas Sistem', href: '/dashboard/tools', icon: SlidersHorizontal, roles: ['SUPER_ADMIN', 'ADMIN'] },
+        { label: 'Log Sistem & Audit', href: '/dashboard/logs', icon: Activity, roles: ['SUPER_ADMIN', 'ADMIN'] },
+        {
+          label: 'Profil & Akun Saya',
+          href: '/dashboard/profile',
+          icon: User,
+        },
         {
           label: 'Pengaturan',
-          href: '/dashboard/settings',
+          href: '/dashboard/settings?tab=whatsapp',
           icon: Settings,
+          roles: ['SUPER_ADMIN', 'ADMIN'],
           children: [
-            { label: 'Profil Saya & Keamanan', href: '/dashboard/settings?tab=profile', icon: User },
             { label: 'WhatsApp Gateway', href: '/dashboard/settings?tab=whatsapp', icon: MessageSquare, roles: ['SUPER_ADMIN', 'ADMIN'] },
             { label: 'Rekening & QRIS', href: '/dashboard/settings?tab=payment', icon: CreditCard, roles: ['SUPER_ADMIN', 'ADMIN'] },
             { label: 'Sistem & Otomatisasi', href: '/dashboard/settings?tab=system', icon: Shield, roles: ['SUPER_ADMIN', 'ADMIN'] },
@@ -183,7 +206,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
     
     const targetMode = queryPart ? new URLSearchParams(queryPart).get('mode') : null;
     const currentMode = searchParams.get('mode');
-    return targetMode === currentMode;
+    if (targetMode !== currentMode) return false;
+
+    const targetTab = queryPart ? new URLSearchParams(queryPart).get('tab') : null;
+    const currentTab = searchParams.get('tab');
+    if (targetTab && currentTab && targetTab !== currentTab) return false;
+
+    return true;
   };
 
   return (
@@ -386,7 +415,9 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
         {/* User Footer Profile */}
         <div style={{ padding: '1rem 0.75rem', borderTop: '1px solid var(--color-border)' }}>
           {!collapsed && session?.user && (
-            <div
+            <Link
+              href="/dashboard/profile"
+              title="Buka Profil & Akun Saya"
               style={{
                 padding: '0.75rem',
                 borderRadius: 'var(--radius-md)',
@@ -395,6 +426,10 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
                 display: 'flex',
                 alignItems: 'center',
                 gap: '0.75rem',
+                textDecoration: 'none',
+                color: 'inherit',
+                border: pathname === '/dashboard/profile' ? '1px solid var(--color-primary)' : '1px solid transparent',
+                transition: 'border-color 0.2s',
               }}
             >
               <div
@@ -457,7 +492,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ collapsed, setCollapsed }) => 
                   );
                 })()}
               </div>
-            </div>
+            </Link>
           )}
 
           <button

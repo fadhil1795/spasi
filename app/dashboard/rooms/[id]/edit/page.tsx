@@ -7,9 +7,19 @@ import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { useToast } from '@/components/ui/Toast';
-import { ArrowLeft, Save, Plus, X, Building2 } from 'lucide-react';
+import { ROOM_TYPES, parseFacilities } from '@/lib/roomConstants';
+import { RoomAssetSelector, RoomAssetAllocItem } from '@/components/rooms/RoomAssetSelector';
+import { RoomPrimaryInfoSection } from '@/components/rooms/RoomPrimaryInfoSection';
+import { ArrowLeft, Save, Plus, X, Building2, UploadCloud, Image as ImageIcon, Loader2 } from 'lucide-react';
 
-const FASILITAS_OPTIONS = ['AC', 'Proyektor', 'Smart TV', 'Sound System', 'WiFi', 'Whiteboard', 'Podium', 'Panggung', 'Kamera CCTV', 'Toilet', 'Mic Wireless'];
+const BUILDING_UTILITIES_LIST = [
+  'WiFi / Internet Kampus',
+  'Toilet Dalam',
+  'Panggung Permanen',
+  'AC Sentral Gedung',
+  'Akses Kursi Roda / Lift',
+  'Area Parkir Khusus',
+];
 
 export default function EditRoomPage() {
   const params = useParams();
@@ -18,13 +28,19 @@ export default function EditRoomPage() {
 
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
 
   const [formData, setFormData] = useState({
     code: '',
     name: '',
+    roomType: 'CLASSROOM',
+    buildingId: '',
     building: '',
     floor: '',
     room: '',
+    departmentId: '',
+    picName: '',
+    picPhone: '',
     area: '',
     capacity: '',
     pricePerHour: '',
@@ -36,29 +52,17 @@ export default function EditRoomPage() {
     description: '',
     status: 'AVAILABLE',
     facilities: [] as string[],
-    assetIds: [] as string[],
+    assetAllocations: [] as RoomAssetAllocItem[],
     photos: [] as string[],
     photoInput: '',
   });
 
-  const [availableAssets, setAvailableAssets] = useState<any[]>([]);
+  const [buildingsList, setBuildingsList] = useState<any[]>([]);
 
   useEffect(() => {
     fetchRoom();
-    fetchAvailableAssets();
+    fetch('/api/buildings').then((r) => r.json()).then((d) => Array.isArray(d) && setBuildingsList(d)).catch(() => {});
   }, [params.id]);
-
-  const fetchAvailableAssets = async () => {
-    try {
-      const res = await fetch('/api/assets?locationId=none');
-      if (res.ok) {
-        const data = await res.json();
-        if (Array.isArray(data)) setAvailableAssets(data);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
 
   const fetchRoom = async () => {
     try {
@@ -66,22 +70,41 @@ export default function EditRoomPage() {
       const res = await fetch(`/api/rooms/${params.id}`);
       if (res.ok) {
         const data = await res.json();
-        
-        // Gabungkan aset yang sudah ada dengan availableAssets jika belum ada
-        if (data.assets && Array.isArray(data.assets)) {
-          setAvailableAssets((prev) => {
-            const existingIds = prev.map((p) => p.id);
-            const toAdd = data.assets.filter((a: any) => !existingIds.includes(a.id));
-            return [...prev, ...toAdd];
+
+        // Susun initial assetAllocations beserta object asset-nya
+        const initMap = new Map<string, RoomAssetAllocItem>();
+        if (Array.isArray(data.assets)) {
+          data.assets.forEach((a: any) => {
+            initMap.set(a.id, { assetId: a.id, quantity: a.quantity || 1, asset: a });
           });
         }
+        if (Array.isArray(data.assetAllocations)) {
+          data.assetAllocations.forEach((al: any) => {
+            if (al.asset) {
+              initMap.set(al.assetId, {
+                assetId: al.assetId,
+                quantity: al.quantity || 1,
+                asset: al.asset,
+              });
+            }
+          });
+        }
+        const initAllocations = Array.from(initMap.values());
+
+        // Parse facilities menjadi list string sederhana
+        const parsedFacs = parseFacilities(data.facilities).map((f) => f.name);
 
         setFormData({
           code: data.code || '',
           name: data.name || '',
+          roomType: data.roomType || 'CLASSROOM',
+          buildingId: data.buildingId || '',
           building: data.building || '',
           floor: data.floor || '',
           room: data.room || '',
+          departmentId: data.departmentId || '',
+          picName: data.picName || '',
+          picPhone: data.picPhone || '',
           area: data.area ? String(data.area) : '',
           capacity: data.capacity ? String(data.capacity) : '',
           pricePerHour: data.pricePerHour ? String(data.pricePerHour) : '',
@@ -92,8 +115,8 @@ export default function EditRoomPage() {
           requiresDepositForInternal: data.requiresDepositForInternal !== undefined ? Boolean(data.requiresDepositForInternal) : false,
           description: data.description || '',
           status: data.status || 'AVAILABLE',
-          facilities: data.facilities ? (typeof data.facilities === 'string' ? JSON.parse(data.facilities) : data.facilities) : [],
-          assetIds: data.assets ? data.assets.map((a: any) => a.id) : [],
+          facilities: parsedFacs,
+          assetAllocations: initAllocations,
           photos: data.photos ? (typeof data.photos === 'string' ? JSON.parse(data.photos) : data.photos) : [],
           photoInput: '',
         });
@@ -112,6 +135,55 @@ export default function EditRoomPage() {
       setFormData({ ...formData, facilities: formData.facilities.filter((f) => f !== item) });
     } else {
       setFormData({ ...formData, facilities: [...formData.facilities, item] });
+    }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    try {
+      setUploadingPhotos(true);
+      const uploadedUrls: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (!file.type.startsWith('image/')) {
+          showToast(`Berkas "${file.name}" bukan gambar valid. Lewati.`, 'warning');
+          continue;
+        }
+
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', file);
+        uploadFormData.append('folder', 'rooms');
+
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: uploadFormData,
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.url) uploadedUrls.push(data.url);
+        } else {
+          const err = await res.json();
+          showToast(`Gagal mengunggah ${file.name}: ${err.error || 'Terjadi kesalahan'}`, 'error');
+        }
+      }
+
+      if (uploadedUrls.length > 0) {
+        setFormData((prev) => ({
+          ...prev,
+          photos: [...prev.photos, ...uploadedUrls],
+        }));
+        showToast(`Berhasil mengunggah ${uploadedUrls.length} foto ruangan!`, 'success');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Terjadi kesalahan jaringan saat mengunggah foto', 'error');
+    } finally {
+      setUploadingPhotos(false);
+      e.target.value = '';
     }
   };
 
@@ -140,10 +212,18 @@ export default function EditRoomPage() {
 
     try {
       setSubmitting(true);
+      const payload = {
+        ...formData,
+        assetAllocations: formData.assetAllocations.map(({ assetId, quantity }) => ({
+          assetId,
+          quantity,
+        })),
+      };
+
       const res = await fetch(`/api/rooms/${params.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(payload),
       });
 
       if (res.ok) {
@@ -195,71 +275,23 @@ export default function EditRoomPage() {
       </p>
 
       <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-        {/* Section A: Informasi Utama */}
-        <Card style={{ padding: '1.5rem' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '1.25rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <Building2 size={18} style={{ color: 'var(--color-primary)' }} /> Informasi Utama
-          </h3>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.25rem' }}>
-            <div>
-              <label className="input-label">Kode Ruangan (Opsional)</label>
-              <input
-                className="input-field"
-                placeholder="Contoh: R-201, STUDIO-A"
-                value={formData.code}
-                onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
-                style={{ width: '100%' }}
-              />
-            </div>
-
-            <div>
-              <label className="input-label">Nama Resmi Ruangan *</label>
-              <input
-                className="input-field"
-                placeholder="Contoh: Ruang Rapat Executive"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                required
-                style={{ width: '100%' }}
-              />
-            </div>
-
-            <div>
-              <label className="input-label">Gedung *</label>
-              <input
-                className="input-field"
-                placeholder="Contoh: Gedung Utama (A)"
-                value={formData.building}
-                onChange={(e) => setFormData({ ...formData, building: e.target.value })}
-                required
-                style={{ width: '100%' }}
-              />
-            </div>
-
-            <div>
-              <label className="input-label">Lantai</label>
-              <input
-                className="input-field"
-                placeholder="Contoh: Lantai 2"
-                value={formData.floor}
-                onChange={(e) => setFormData({ ...formData, floor: e.target.value })}
-                style={{ width: '100%' }}
-              />
-            </div>
-
-            <div style={{ gridColumn: '1 / -1' }}>
-              <label className="input-label">Nama Ruang / Area Spesiﬁk</label>
-              <input
-                className="input-field"
-                placeholder="Contoh: Ruang Rapat 201"
-                value={formData.room}
-                onChange={(e) => setFormData({ ...formData, room: e.target.value })}
-                style={{ width: '100%' }}
-              />
-            </div>
-          </div>
-        </Card>
+        {/* Section A: Informasi Utama & Standarisasi Penamaan */}
+        <RoomPrimaryInfoSection
+          data={{
+            code: formData.code,
+            name: formData.name,
+            roomType: formData.roomType,
+            buildingId: formData.buildingId,
+            building: formData.building,
+            floor: formData.floor,
+            room: formData.room,
+            departmentId: formData.departmentId,
+            picName: formData.picName,
+            picPhone: formData.picPhone,
+          }}
+          onChange={(next) => setFormData({ ...formData, ...next })}
+          autoNamingDefault={false}
+        />
 
         {/* Section B: Spesifikasi & Deskripsi */}
         <Card style={{ padding: '1.5rem' }}>
@@ -398,31 +430,36 @@ export default function EditRoomPage() {
           </div>
         </Card>
 
-        {/* Section D: Fasilitas & Aset Ruangan */}
+        {/* Section D: Utilitas Bangunan & Aset Ruangan */}
         <Card style={{ padding: '1.5rem' }}>
           <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-            Fasilitas & Aset Ruangan
+            Aset &amp; Perlengkapan Ruangan
           </h3>
 
           <div style={{ marginBottom: '1.5rem' }}>
-            <label className="input-label" style={{ marginBottom: '0.5rem', display: 'block' }}>Fasilitas Ruangan</label>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '0.75rem', marginBottom: '1rem' }}>
-              {FASILITAS_OPTIONS.map((item) => {
+            <label className="input-label" style={{ marginBottom: '0.25rem', display: 'block' }}>
+              Utilitas Bangunan Permanen (Non-Aset)
+            </label>
+            <p style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginBottom: '0.65rem' }}>
+              Pilih atribut bawaan gedung yang melekat permanen (bukan barang inventaris lepas).
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+              {BUILDING_UTILITIES_LIST.map((item) => {
                 const checked = formData.facilities.includes(item);
                 return (
                   <label
                     key={item}
                     style={{
-                      display: 'flex',
+                      display: 'inline-flex',
                       alignItems: 'center',
-                      gap: '0.5rem',
+                      gap: '0.45rem',
                       cursor: 'pointer',
-                      fontSize: '0.88rem',
-                      padding: '0.4rem 0.6rem',
+                      fontSize: '0.84rem',
+                      padding: '0.4rem 0.75rem',
                       border: '1px solid',
                       borderColor: checked ? 'var(--color-primary)' : 'var(--color-border)',
-                      background: checked ? 'rgba(79, 70, 229, 0.04)' : 'transparent',
-                      borderRadius: 'var(--radius-sm)',
+                      background: checked ? 'rgba(79, 70, 229, 0.08)' : 'transparent',
+                      borderRadius: 'var(--radius-pill)',
                       transition: 'all 0.2s',
                     }}
                   >
@@ -440,95 +477,180 @@ export default function EditRoomPage() {
           </div>
 
           <div>
-            <label className="input-label">Aset Fisik Terpasang (Terintegrasi ke Data Aset)</label>
+            <label className="input-label">Aset Fisik Terpasang (Terintegrasi ke Master Data Aset)</label>
             <p style={{ fontSize: '0.8rem', color: 'var(--color-muted)', marginBottom: '0.8rem' }}>
-              Pilih aset fisik aktual (yang belum ditempatkan atau yang sudah ada di ruangan ini) untuk ditautkan lokasinya.
+              Pilih kategori dan aset yang ditempatkan di ruangan ini. Jumlah unit pada tabel list di bawah dapat diedit langsung.
             </p>
-            {availableAssets.length === 0 ? (
-              <div style={{ padding: '1rem', background: 'var(--color-surface2)', borderRadius: 'var(--radius-md)', fontSize: '0.85rem', color: 'var(--color-muted)' }}>
-                Tidak ada aset fisik nganggur yang tersedia.
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '0.6rem' }}>
-                {availableAssets.map((asset) => {
-                  const active = formData.assetIds.includes(asset.id);
-                  return (
-                    <div
-                      key={asset.id}
-                      onClick={() => {
-                        const newIds = active
-                          ? formData.assetIds.filter((id) => id !== asset.id)
-                          : [...formData.assetIds, asset.id];
-                        setFormData({ ...formData, assetIds: newIds });
-                      }}
-                      style={{
-                        padding: '0.75rem',
-                        border: '1px solid',
-                        borderColor: active ? 'var(--color-primary)' : 'var(--color-border)',
-                        background: active ? 'rgba(79, 70, 229, 0.08)' : 'var(--color-surface)',
-                        borderRadius: 'var(--radius-md)',
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.8rem',
-                        transition: 'all 0.2s',
-                      }}
-                    >
-                      <input 
-                        type="checkbox" 
-                        checked={active} 
-                        readOnly 
-                        style={{ cursor: 'pointer', accentColor: 'var(--color-primary)' }} 
-                      />
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{asset.name}</div>
-                        <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)' }}>SN: {asset.serialNumber || '-'} | {asset.code}</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <RoomAssetSelector
+              allocations={formData.assetAllocations}
+              onChange={(next) => setFormData({ ...formData, assetAllocations: next })}
+            />
           </div>
         </Card>
 
-        {/* Section E: Foto */}
+        {/* Section E: Foto Ruangan */}
         <Card style={{ padding: '1.5rem' }}>
-          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.5rem' }}>
-            Foto Ruangan
+          <h3 style={{ fontSize: '1.1rem', fontWeight: 700, marginBottom: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+            <ImageIcon size={18} style={{ color: 'var(--color-primary-light)' }} />
+            Dokumentasi Foto Fisik Ruangan
           </h3>
+          <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)', marginBottom: '0.85rem' }}>
+            Unggah satu atau beberapa foto fisik ruangan (tampak depan, interior, panggung, proyektor, fasilitas).
+          </p>
 
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+          {/* Area Unggah Berkas Foto */}
+          <div
+            style={{
+              border: '2px dashed var(--color-border)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '1.75rem 1rem',
+              textAlign: 'center',
+              background: 'var(--color-surface2)',
+              cursor: uploadingPhotos ? 'not-allowed' : 'pointer',
+              position: 'relative',
+              transition: 'all 0.2s',
+            }}
+          >
             <input
-              className="input-field"
-              placeholder="Masukkan URL foto (https://...)"
-              value={formData.photoInput}
-              onChange={(e) => setFormData({ ...formData, photoInput: e.target.value })}
-              style={{ flex: 1 }}
+              type="file"
+              accept="image/*"
+              multiple
+              disabled={uploadingPhotos}
+              onChange={handleFileUpload}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                opacity: 0,
+                cursor: uploadingPhotos ? 'not-allowed' : 'pointer',
+              }}
             />
-            <Button type="button" variant="secondary" onClick={handleAddPhoto}>
-              <Plus size={16} /> Tambah
-            </Button>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.6rem', pointerEvents: 'none' }}>
+              <div
+                style={{
+                  width: '46px',
+                  height: '46px',
+                  borderRadius: '50%',
+                  background: 'rgba(79, 70, 229, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--color-primary-light)',
+                }}
+              >
+                {uploadingPhotos ? <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} /> : <UploadCloud size={24} />}
+              </div>
+              <div>
+                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-text)' }}>
+                  {uploadingPhotos ? 'Sedang mengunggah foto ruangan...' : 'Klik untuk Pilih Foto atau Seret ke Sini'}
+                </span>
+                <p style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginTop: '0.2rem' }}>
+                  Dapat memilih beberapa foto sekaligus (JPG, PNG, WebP)
+                </p>
+              </div>
+            </div>
           </div>
 
+          {/* Grid Preview Foto Terunggah */}
           {formData.photos.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))', gap: '0.75rem' }}>
-              {formData.photos.map((url, idx) => (
-                <div key={idx} style={{ position: 'relative', height: '90px', borderRadius: 'var(--radius-md)', overflow: 'hidden', border: '1px solid var(--color-border)' }}>
-                  <img src={url} alt={`Foto ${idx + 1}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                  <button
-                    type="button"
-                    onClick={() => handleRemovePhoto(idx)}
+            <div style={{ marginTop: '1rem' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-muted)', marginBottom: '0.6rem' }}>
+                Foto Ruangan ({formData.photos.length} foto):
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+                  gap: '0.75rem',
+                }}
+              >
+                {formData.photos.map((url, idx) => (
+                  <div
+                    key={idx}
                     style={{
-                      position: 'absolute', top: '4px', right: '4px', background: 'rgba(0,0,0,0.6)', color: '#fff', border: 'none', borderRadius: '50%', width: '22px', height: '22px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+                      position: 'relative',
+                      borderRadius: 'var(--radius-md)',
+                      overflow: 'hidden',
+                      border: idx === 0 ? '2px solid var(--color-primary-light)' : '1px solid var(--color-border)',
+                      aspectRatio: '16/10',
+                      background: '#0f172a',
                     }}
                   >
-                    <X size={14} />
-                  </button>
-                </div>
-              ))}
+                    <img
+                      src={url}
+                      alt={`Foto Ruangan ${idx + 1}`}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                    {idx === 0 && (
+                      <span
+                        style={{
+                          position: 'absolute',
+                          bottom: '4px',
+                          left: '4px',
+                          fontSize: '0.65rem',
+                          fontWeight: 700,
+                          background: 'var(--color-primary)',
+                          color: '#fff',
+                          padding: '0.1rem 0.4rem',
+                          borderRadius: '3px',
+                        }}
+                      >
+                        Sampul Utama
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRemovePhoto(idx)}
+                      style={{
+                        position: 'absolute',
+                        top: '4px',
+                        right: '4px',
+                        width: '22px',
+                        height: '22px',
+                        borderRadius: '50%',
+                        background: 'rgba(0, 0, 0, 0.7)',
+                        color: '#ef4444',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s',
+                      }}
+                      title="Hapus foto ini"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
+
+          {/* Opsi Collapse URL Eksternal */}
+          <details style={{ marginTop: '0.5rem', fontSize: '0.78rem', color: 'var(--color-muted)' }}>
+            <summary style={{ cursor: 'pointer', userSelect: 'none' }}>
+              Atau masukkan tautan URL gambar eksternal...
+            </summary>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.4rem' }}>
+              <input
+                className="input-field"
+                style={{ flex: 1, fontSize: '0.8rem', height: '34px' }}
+                placeholder="https://..."
+                value={formData.photoInput}
+                onChange={(e) => setFormData({ ...formData, photoInput: e.target.value })}
+              />
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleAddPhoto}
+              >
+                Tambah URL
+              </button>
+            </div>
+          </details>
         </Card>
 
         {/* Section F: Status */}

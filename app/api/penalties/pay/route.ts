@@ -9,10 +9,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
+    const userRole = (session.user as any)?.role || 'BORROWER';
+    if (!['SUPER_ADMIN', 'ADMIN', 'STAFF'].includes(userRole)) {
+      return NextResponse.json(
+        { error: 'Konfirmasi pelunasan denda hanya dapat dilakukan oleh Staff atau Admin' },
+        { status: 403 }
+      );
+    }
+
     const { transactionType, id, amount, useDeposit } = await request.json();
 
     if (!transactionType || !id || (!amount && !useDeposit)) {
       return NextResponse.json({ error: 'Data tidak lengkap' }, { status: 400 });
+    }
+    if (amount !== undefined && amount !== null && Number(amount) < 0) {
+      return NextResponse.json({ error: 'Nominal pembayaran tidak valid' }, { status: 400 });
     }
 
     let transaction;

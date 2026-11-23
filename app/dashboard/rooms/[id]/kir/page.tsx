@@ -41,7 +41,17 @@ export default function RoomKIRPage() {
     );
   }
 
-  const assets: any[] = room.assets || [];
+  // Gabungkan aset yang tertaut langsung (assets) dan alokasi jumlah per ruangan (assetAllocations)
+  const combinedMap = new Map<string, any>();
+  (room.assets || []).forEach((a: any) => {
+    combinedMap.set(a.id, { ...a, roomQty: a.quantity || 1 });
+  });
+  (room.assetAllocations || []).forEach((al: any) => {
+    if (al.asset) {
+      combinedMap.set(al.asset.id, { ...al.asset, roomQty: al.quantity || 1 });
+    }
+  });
+  const assets: any[] = Array.from(combinedMap.values());
   const baikCount = assets.filter((a) => (a.condition || '').toLowerCase() === 'baik').length;
   const rusakRinganCount = assets.filter((a) => (a.condition || '').toLowerCase().includes('ringan')).length;
   const rusakBeratCount = assets.filter((a) => (a.condition || '').toLowerCase().includes('berat')).length;
@@ -201,7 +211,7 @@ export default function RoomKIRPage() {
                     {ast.serialNumber || '-'}
                   </td>
                   <td style={{ padding: '0.55rem 0.5rem', textAlign: 'center', fontWeight: 700 }}>
-                    {ast.quantity || 1}
+                    {ast.roomQty || ast.quantity || 1}
                   </td>
                   <td style={{ padding: '0.55rem 0.75rem', textAlign: 'center' }}>
                     <span
@@ -286,7 +296,7 @@ export default function RoomKIRPage() {
             <div style={{ fontSize: '0.9rem', fontWeight: 700 }}>Penanggung Jawab Ruangan (PIC)</div>
             <div style={{ height: '70px' }}></div>
             <div style={{ fontSize: '0.9rem', fontWeight: 800, textDecoration: 'underline' }}>
-              (...................................................)
+              {room.picName ? room.picName : '(...................................................)'}
             </div>
             <div style={{ fontSize: '0.8rem', color: '#6B7280', marginTop: '0.2rem' }}>NIP/NIDN. ........................................</div>
           </div>

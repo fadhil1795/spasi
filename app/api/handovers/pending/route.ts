@@ -1,4 +1,4 @@
-﻿import { NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getAuthSession } from "@/lib/auth";
 
@@ -46,7 +46,7 @@ export async function GET() {
       const needsCheckIn = b.bookingStatus === "CONFIRMED" && !hasCheckIn;
       const needsCheckOut = b.bookingStatus === "ACTIVE";
       const handoverType = needsCheckIn ? "CHECK_IN" : needsCheckOut ? "CHECK_OUT" : null;
-      return { id: b.id, transactionType: "BOOKING", ticketNumber: b.bookingNumber, borrowerName: b.renter.name, borrowerEmail: b.renter.email || null, assetName: b.location.name, assetCode: b.location.building, assetImage: null, startDate: b.startTime, endDate: b.endTime, status: b.bookingStatus, handoverType, handoverStatus: b.handoverLog?.status || null };
+      return { id: b.id, transactionType: "BOOKING", ticketNumber: b.bookingNumber, borrowerName: b.renter.name, borrowerEmail: b.renter.email || null, assetName: b.location?.name || 'Paket Peralatan Sarpras', assetCode: b.location?.building || '-', assetImage: null, startDate: b.startTime, endDate: b.endTime, status: b.bookingStatus, handoverType, handoverStatus: b.handoverLog?.status || null };
     }).filter(item => item.handoverType !== null);
 
     return NextResponse.json({ loans: loanItems, bookings: bookingItems, total: loanItems.length + bookingItems.length });

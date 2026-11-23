@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthSession } from '@/lib/auth';
 import { createAuditLog } from '@/lib/audit';
+import { calculatePenaltyFee } from '@/lib/utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,6 +76,18 @@ export async function POST(request: Request) {
         include: { asset: true, user: true },
       });
       if (!loan) return NextResponse.json({ error: 'Data peminjaman tidak ditemukan' }, { status: 404 });
+      if (type === 'CHECK_IN' && loan.status !== 'APPROVED') {
+        return NextResponse.json(
+          { error: `Hanya peminjaman yang sudah disetujui penuh (APPROVED) yang dapat di-Check-In (Status saat ini: ${loan.status})` },
+          { status: 400 }
+        );
+      }
+      if (type === 'CHECK_OUT' && !['ACTIVE', 'RETURN_REQUESTED'].includes(loan.status)) {
+        return NextResponse.json(
+          { error: `Hanya peminjaman yang sedang aktif (ACTIVE / RETURN_REQUESTED) yang dapat di-Check-Out (Status saat ini: ${loan.status})` },
+          { status: 400 }
+        );
+      }
       assetName = loan.asset.name;
       assetId = loan.assetId;
       borrowerId = loan.userId;
@@ -86,7 +99,19 @@ export async function POST(request: Request) {
         include: { renter: true, location: true },
       });
       if (!booking) return NextResponse.json({ error: 'Data sewa ruangan tidak ditemukan' }, { status: 404 });
-      assetName = booking.location.name;
+      if (type === 'CHECK_IN' && booking.bookingStatus !== 'CONFIRMED') {
+        return NextResponse.json(
+          { error: `Hanya booking yang sudah disetujui & dikonfirmasi (CONFIRMED) yang dapat di-Check-In (Status saat ini: ${booking.bookingStatus})` },
+          { status: 400 }
+        );
+      }
+      if (type === 'CHECK_OUT' && !['ACTIVE', 'RETURN_REQUESTED'].includes(booking.bookingStatus)) {
+        return NextResponse.json(
+          { error: `Hanya booking yang sedang aktif (ACTIVE / RETURN_REQUESTED) yang dapat di-Check-Out (Status saat ini: ${booking.bookingStatus})` },
+          { status: 400 }
+        );
+      }
+      assetName = booking.location?.name || 'Paket Peralatan Sarpras';
       borrowerId = (session.user as any).id; // fallback, atau ditarik dari renter
       if (booking.renter?.email) {
         const matchingUser = await prisma.user.findFirst({ where: { email: booking.renter.email } });
@@ -122,17 +147,30 @@ export async function POST(request: Request) {
       const isCheckIn = type === 'CHECK_IN'; // Pengambilan awal
       const isCheckOut = type === 'CHECK_OUT'; // Pengembalian akhir
 
+      const now = new Date();
+
       await prisma.$transaction(async (tx) => {
         if (isCheckIn) {
           // Status peminjaman / sewa berubah menjadi ACTIVE
           if (loanId) {
+            const loanRec = await tx.loan.findUnique({
+              where: { id: loanId },
+              include: { asset: true },
+            });
+            const loanQty = loanRec?.quantity || 1;
+            const currentAvail = loanRec?.asset?.availableQty ?? 1;
+            const newAvail = Math.max(0, currentAvail - loanQty);
+
             await tx.loan.update({
               where: { id: loanId },
-              data: { status: 'ACTIVE' },
+              data: { status: 'ACTIVE', checkInTime: now },
             });
             await tx.asset.update({
               where: { id: assetId },
-              data: { status: 'BORROWED' },
+              data: {
+                availableQty: newAvail,
+                status: newAvail === 0 ? 'BORROWED' : 'AVAILABLE',
+              },
             });
           } else if (bookingId) {
             await tx.roomBooking.update({
@@ -146,20 +184,42 @@ export async function POST(request: Request) {
           const hasIssue = parsedComponents.some((c: any) => c.isMissing || c.isDamaged);
 
           if (loanId) {
-            // Selesaikan Peminjaman
-            await tx.loan.update({
+            const loanRec = await tx.loan.findUnique({
               where: { id: loanId },
-              data: { status: hasIssue ? 'RETURNED' : 'RETURNED' }, // status returned, denda diproses di claim
+              include: { asset: true },
             });
+            const setting = await tx.systemSetting.findUnique({ where: { id: 'default' } });
+            const penaltyRate = setting?.dailyPenaltyRate || 50000;
+            const penaltyFee = loanRec ? calculatePenaltyFee(loanRec.endDate, now, penaltyRate) : 0;
+
+            const loanQty = loanRec?.quantity || 1;
+            const totalQty = loanRec?.asset?.quantity || 1;
+            const currentAvail = loanRec?.asset?.availableQty ?? 0;
 
             // Tentukan status fisik aset
             const isMissing = parsedComponents.some((c: any) => c.isMissing);
             const isDamaged = parsedComponents.some((c: any) => c.isDamaged);
 
+            const restoredAvail = isMissing
+              ? currentAvail
+              : Math.min(totalQty, currentAvail + loanQty);
+
+            // Selesaikan Peminjaman
+            await tx.loan.update({
+              where: { id: loanId },
+              data: {
+                status: 'RETURNED',
+                checkOutTime: now,
+                penaltyFee,
+                penaltyStatus: penaltyFee === 0 ? 'PAID' : 'UNPAID',
+              },
+            });
+
             await tx.asset.update({
               where: { id: assetId },
               data: {
-                status: isMissing ? 'DISPOSED' : (isDamaged ? 'MAINTENANCE' : 'AVAILABLE'),
+                availableQty: restoredAvail,
+                status: isMissing ? 'DISPOSED' : (isDamaged ? 'MAINTENANCE' : (restoredAvail > 0 ? 'AVAILABLE' : 'BORROWED')),
                 condition: isMissing ? 'Hilang (Laporan Kehilangan)' : (isDamaged ? 'Rusak Berat' : 'Baik'),
               },
             });

@@ -6,8 +6,9 @@ import Link from 'next/link';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
+import { Modal } from '@/components/ui/Modal';
 import { useToast } from '@/components/ui/Toast';
-import { ArrowLeft, Save, Plus, X, Package, Building2, Sparkles } from 'lucide-react';
+import { ArrowLeft, Save, Plus, X, Package, Building2, Sparkles, UploadCloud, Image as ImageIcon, Loader2, Trash2 } from 'lucide-react';
 
 const FASILITAS_OPTIONS = ['AC', 'Proyektor', 'Smart TV', 'Sound System', 'WiFi', 'Whiteboard', 'Podium', 'Mic Wireless', 'Laptop', 'Kamera'];
 
@@ -19,7 +20,19 @@ function NewAssetForm() {
   const [categories, setCategories] = useState<any[]>([]);
   const [locations, setLocations] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [brands, setBrands] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+
+  // Klasifikasi Bertingkat: Induk & Subkategori
+  const [selectedParentCatId, setSelectedParentCatId] = useState('');
+  const [selectedSubCatId, setSelectedSubCatId] = useState('');
+
+  // Standarisasi Penamaan & Model
+  const [model, setModel] = useState('');
+  const [specVariant, setSpecVariant] = useState('');
+  const [autoNaming, setAutoNaming] = useState(true);
+  const [isCustomBrand, setIsCustomBrand] = useState(false);
+  const [customBrandInput, setCustomBrandInput] = useState('');
 
   // Checklist aksesori
   const [checklistItems, setChecklistItems] = useState<string[]>([]);
@@ -31,6 +44,19 @@ function NewAssetForm() {
   const [extraAttrVal, setExtraAttrVal] = useState('');
 
   const prefilledRoomId = searchParams.get('roomId') || '';
+  const prefilledBrand = searchParams.get('brand') || '';
+  const prefilledCat = searchParams.get('cat') || '';
+  const prefilledSubcat = searchParams.get('subcat') || '';
+
+  // Modal Pendaftaran Merek Baru
+  const [newBrandModalOpen, setNewBrandModalOpen] = useState(false);
+  const [newBrandForm, setNewBrandForm] = useState({
+    name: '',
+    categoryCode: '',
+    subCategoryCode: '',
+    description: '',
+  });
+  const [savingBrand, setSavingBrand] = useState(false);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -48,6 +74,7 @@ function NewAssetForm() {
     isRentable: false,
     isLoanable: true,
     isFixedToRoom: prefilledRoomId ? true : false,
+    picName: '',
     status: 'AVAILABLE',
     condition: 'Baik',
     images: [] as string[],
@@ -58,25 +85,225 @@ function NewAssetForm() {
     fetchOptions();
   }, []);
 
+  const fetchBrandsForCategories = async (catCode?: string, subCode?: string) => {
+    try {
+      let url = '/api/brands';
+      const p = new URLSearchParams();
+      if (catCode) p.set('categoryCode', catCode);
+      if (subCode) p.set('subCategoryCode', subCode);
+      if (p.toString()) url += `?${p.toString()}`;
+
+      const res = await fetch(url);
+      if (res.ok) {
+        const bData = await res.json();
+        if (Array.isArray(bData.brands)) {
+          setBrands(bData.brands);
+          if (bData.brands.length > 0) {
+            setFormData((prev) => {
+              if (prefilledBrand && bData.brands.includes(prefilledBrand)) {
+                return { ...prev, brand: prefilledBrand };
+              }
+              if (!prev.brand || !bData.brands.includes(prev.brand)) {
+                return { ...prev, brand: bData.brands[0] };
+              }
+              return prev;
+            });
+          }
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  };
+
+  const openNewBrandModal = () => {
+    const parent = categories.find((c: any) => c.id === selectedParentCatId);
+    const sub = categories.find((c: any) => c.id === selectedSubCatId);
+    setNewBrandForm({
+      name: '',
+      categoryCode: parent ? parent.code : 'ELK',
+      subCategoryCode: sub ? sub.code : '',
+      description: '',
+    });
+    setNewBrandModalOpen(true);
+  };
+
+  const handleSaveNewBrand = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newBrandForm.name.trim()) {
+      showToast('Nama merek wajib diisi', 'error');
+      return;
+    }
+    try {
+      setSavingBrand(true);
+      const res = await fetch('/api/brands', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newBrandForm),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || 'Gagal mendaftarkan merek');
+      }
+
+      showToast(`Merek "${newBrandForm.name}" berhasil didaftarkan!`, 'success');
+      const bName = newBrandForm.name.trim();
+      setBrands((prev) => (prev.includes(bName) ? prev : [bName, ...prev]));
+      setFormData((prev) => ({ ...prev, brand: bName }));
+      setIsCustomBrand(false);
+      setNewBrandModalOpen(false);
+    } catch (err: any) {
+      showToast(err.message || 'Gagal menyimpan merek', 'error');
+    } finally {
+      setSavingBrand(false);
+    }
+  };
+
   const fetchOptions = async () => {
     try {
-      const [resC, resL, resD] = await Promise.all([
+      const [resC, resL, resD, resB] = await Promise.all([
         fetch('/api/public/categories'),
         fetch('/api/rooms'),
         fetch('/api/departments'),
+        fetch('/api/brands'),
       ]);
       if (resC.ok) {
         const cats = await resC.json();
         setCategories(cats);
-        if (cats.length > 0) setFormData((prev) => ({ ...prev, categoryId: cats[0].id }));
+        // Cari parent categories
+        const parents = cats.filter((c: any) => !c.parentId);
+        if (parents.length > 0) {
+          const targetParent = prefilledCat
+            ? parents.find((p: any) => p.code?.toUpperCase() === prefilledCat.toUpperCase() || p.id === prefilledCat) || parents[0]
+            : parents[0];
+
+          setSelectedParentCatId(targetParent.id);
+          const subCats = cats.filter((c: any) => c.parentId === targetParent.id);
+
+          const targetSub = prefilledSubcat && subCats.length > 0
+            ? subCats.find((s: any) => s.code?.toUpperCase() === prefilledSubcat.toUpperCase() || s.id === prefilledSubcat) || subCats[0]
+            : subCats.length > 0 ? subCats[0] : null;
+
+          if (targetSub) {
+            setSelectedSubCatId(targetSub.id);
+            setFormData((prev) => ({ ...prev, categoryId: targetSub.id }));
+            fetchBrandsForCategories(targetParent.code, targetSub.code);
+          } else {
+            setSelectedSubCatId('');
+            setFormData((prev) => ({ ...prev, categoryId: targetParent.id }));
+            fetchBrandsForCategories(targetParent.code);
+          }
+        }
       }
       if (resL.ok) setLocations(await resL.json());
       if (resD.ok) {
         const depts = await resD.json();
         if (Array.isArray(depts)) setDepartments(depts);
       }
+      if (resB.ok) {
+        const bData = await resB.json();
+        if (Array.isArray(bData.brands)) {
+          setBrands(bData.brands);
+          if (bData.brands.length > 0) {
+            setFormData((prev) => ({
+              ...prev,
+              brand: prefilledBrand && bData.brands.includes(prefilledBrand) ? prefilledBrand : bData.brands[0],
+            }));
+          }
+        }
+      }
     } catch (e) {
       console.error(e);
+    }
+  };
+
+  // Efek Standarisasi Nama Otomatis: [Merek] + [Model/Tipe] + [Spesifikasi/Varian]
+  useEffect(() => {
+    if (autoNaming) {
+      const activeBrand = isCustomBrand ? customBrandInput : formData.brand;
+      const parts = [activeBrand, model, specVariant]
+        .map((s) => (s || '').trim())
+        .filter(Boolean);
+      const generatedName = parts.join(' ');
+      if (generatedName) {
+        setFormData((prev) => ({ ...prev, name: generatedName }));
+      }
+    }
+  }, [formData.brand, customBrandInput, isCustomBrand, model, specVariant, autoNaming]);
+
+  const handleParentCategoryChange = (parentId: string) => {
+    setSelectedParentCatId(parentId);
+    const parentCat = categories.find((c: any) => c.id === parentId);
+    const subCats = categories.filter((c: any) => c.parentId === parentId);
+    if (subCats.length > 0) {
+      setSelectedSubCatId(subCats[0].id);
+      setFormData((prev) => ({ ...prev, categoryId: subCats[0].id }));
+      fetchBrandsForCategories(parentCat?.code, subCats[0].code);
+    } else {
+      setSelectedSubCatId('');
+      setFormData((prev) => ({ ...prev, categoryId: parentId }));
+      fetchBrandsForCategories(parentCat?.code);
+    }
+  };
+
+  const handleSubCategoryChange = (subId: string) => {
+    setSelectedSubCatId(subId);
+    setFormData((prev) => ({ ...prev, categoryId: subId || selectedParentCatId }));
+    const parentCat = categories.find((c: any) => c.id === selectedParentCatId);
+    const subCat = categories.find((c: any) => c.id === subId);
+    fetchBrandsForCategories(parentCat?.code, subCat?.code);
+  };
+
+  const [uploadingImages, setUploadingImages] = useState(false);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    try {
+      setUploadingImages(true);
+      const uploadedUrls: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (!file.type.startsWith('image/')) {
+          showToast(`Berkas "${file.name}" bukan gambar valid. Lewati.`, 'warning');
+          continue;
+        }
+
+        const uploadFormData = new FormData();
+        uploadFormData.append('file', file);
+        uploadFormData.append('folder', 'assets');
+
+        const res = await fetch('/api/upload', {
+          method: 'POST',
+          body: uploadFormData,
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          if (data.url) {
+            uploadedUrls.push(data.url);
+          }
+        } else {
+          const err = await res.json();
+          showToast(`Gagal mengunggah ${file.name}: ${err.error || 'Terjadi kesalahan'}`, 'error');
+        }
+      }
+
+      if (uploadedUrls.length > 0) {
+        setFormData((prev) => ({
+          ...prev,
+          images: [...prev.images, ...uploadedUrls],
+        }));
+        showToast(`Berhasil mengunggah ${uploadedUrls.length} foto aset!`, 'success');
+      }
+    } catch (err) {
+      console.error(err);
+      showToast('Terjadi kesalahan jaringan saat mengunggah foto', 'error');
+    } finally {
+      setUploadingImages(false);
+      e.target.value = '';
     }
   };
 
@@ -108,6 +335,8 @@ function NewAssetForm() {
       return;
     }
 
+    const resolvedBrand = (isCustomBrand ? customBrandInput : formData.brand).trim();
+
     try {
       setLoading(true);
       const imagesArray = formData.images.filter((url) => url.trim() !== '');
@@ -116,9 +345,14 @@ function NewAssetForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           ...formData,
+          brand: resolvedBrand || null,
           images: imagesArray,
           checklistItems,
-          customAttributes,
+          customAttributes: {
+            ...customAttributes,
+            model: model.trim() || undefined,
+            specVariant: specVariant.trim() || undefined,
+          },
           locationId: formData.locationId || null,
         }),
       });
@@ -192,36 +426,64 @@ function NewAssetForm() {
       </p>
 
       <form onSubmit={handleSubmit}>
-        {/* Seksi A: Informasi Dasar */}
+        {/* Seksi A: Informasi Dasar & Master Terstandarisasi */}
         <div style={sectionStyle}>
           <div style={sectionTitleStyle}>
             <Package size={18} style={{ color: 'var(--color-primary)' }} />
-            A. Informasi Dasar Aset
+            A. Informasi Dasar & Identitas Katalog
           </div>
 
-          <Input
-            label="Nama Aset / Sarana *"
-            placeholder="Contoh: Proyektor Epson EB-X51"
-            value={formData.name}
-            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-            required
-          />
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          {/* Baris 1: Kategori Induk, Subkategori Spesifik & Departemen Pemilik */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
+            {/* Kategori Induk */}
             <div>
-              <label style={labelStyle}>Kategori Aset *</label>
+              <label style={labelStyle}>Kategori Utama (Induk) *</label>
               <select
                 className="input-field"
-                value={formData.categoryId}
-                onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                value={selectedParentCatId}
+                onChange={(e) => handleParentCategoryChange(e.target.value)}
                 required
               >
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                {categories.filter((c: any) => !c.parentId).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    [{c.code || 'AST'}] {c.name}
+                  </option>
                 ))}
               </select>
             </div>
 
+            {/* Subkategori Spesifik */}
+            <div>
+              <label style={labelStyle}>
+                Subkategori Spesifik {categories.some((c: any) => c.parentId === selectedParentCatId) && '*'}
+              </label>
+              {(() => {
+                const subCats = categories.filter((c: any) => c.parentId === selectedParentCatId);
+                if (subCats.length === 0) {
+                  return (
+                    <div style={{ padding: '0.65rem 0.9rem', fontSize: '0.85rem', color: 'var(--color-muted)', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', background: 'var(--color-surface2)' }}>
+                      Tanpa Subkategori
+                    </div>
+                  );
+                }
+                return (
+                  <select
+                    className="input-field"
+                    value={selectedSubCatId}
+                    onChange={(e) => handleSubCategoryChange(e.target.value)}
+                    required
+                  >
+                    {subCats.map((sc) => (
+                      <option key={sc.id} value={sc.id}>
+                        [{sc.code}] {sc.name}
+                      </option>
+                    ))}
+                  </select>
+                );
+              })()}
+            </div>
+
+            {/* Unit / Fakultas Pemilik */}
             <div>
               <label style={labelStyle}>Fakultas / Unit Pemilik Aset</label>
               <select
@@ -229,15 +491,241 @@ function NewAssetForm() {
                 value={formData.departmentId}
                 onChange={(e) => setFormData({ ...formData, departmentId: e.target.value })}
               >
-                <option value="">-- Milik Kampus Umum / Pusat --</option>
+                <option value="">[PUSAT] Milik Kampus Umum / Yayasan</option>
                 {departments.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name} ({d.code})</option>
+                  <option key={d.id} value={d.id}>
+                    [{d.code?.replace(/^DEPT-/, '') || d.code}] {d.name}
+                  </option>
                 ))}
               </select>
             </div>
+
+            {/* Penanggung Jawab (PIC) Aset */}
+            <div>
+              <label style={labelStyle}>Nama Penanggung Jawab (PIC) Aset</label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="Contoh: Bpk. Hendra Wijaya, S.T. (Opsional)"
+                value={formData.picName}
+                onChange={(e) => setFormData({ ...formData, picName: e.target.value })}
+              />
+            </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          {/* Live Tag Aset Preview */}
+          {(() => {
+            const activeCat = categories.find((c) => c.id === formData.categoryId);
+            const parentCat = categories.find((c) => c.id === selectedParentCatId);
+            const selectedDept = departments.find((d) => d.id === formData.departmentId);
+
+            // Gunakan kode subkategori jika ada, atau fallback ke kode kategori induk
+            const catCode = (activeCat?.code || parentCat?.code || 'AST').toUpperCase();
+            const deptCode = (selectedDept?.code?.replace(/^DEPT-/, '') || 'SARPRAS').toUpperCase();
+            const currentYear = new Date().getFullYear();
+            const tagPreview = `${deptCode}-${catCode}-${currentYear}-XXXX`;
+
+            return (
+              <div
+                style={{
+                  background: 'rgba(59, 130, 246, 0.06)',
+                  border: '1px dashed rgba(59, 130, 246, 0.3)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '0.65rem 1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  fontSize: '0.82rem',
+                  color: 'var(--color-primary-light)',
+                  marginTop: '-0.25rem',
+                }}
+              >
+                <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}>
+                  🏷️ Format Tag Aset Standar Otomatis:
+                </span>
+                <code
+                  style={{
+                    fontSize: '0.88rem',
+                    fontWeight: 800,
+                    letterSpacing: '0.05em',
+                    background: 'var(--color-surface)',
+                    padding: '0.2rem 0.6rem',
+                    borderRadius: '4px',
+                    border: '1px solid rgba(59, 130, 246, 0.2)',
+                  }}
+                >
+                  {tagPreview}
+                </code>
+              </div>
+            );
+          })()}
+
+          {/* Baris 2: Merek / Brand, Model / Tipe, dan Spesifikasi Singkat */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem', marginTop: '0.25rem' }}>
+            {/* Merek / Brand */}
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                <label style={{ ...labelStyle, marginBottom: 0 }}>Merek / Brand *</label>
+                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <button
+                    type="button"
+                    onClick={openNewBrandModal}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--color-primary-light)',
+                      fontSize: '0.75rem',
+                      fontWeight: 700,
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                    }}
+                    title="Daftarkan merek baru lengkap dengan kategori & subkategori"
+                  >
+                    + Merek Baru (Kategori & Sub)
+                  </button>
+                  <span style={{ fontSize: '0.7rem', color: 'var(--color-muted)' }}>|</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsCustomBrand(!isCustomBrand);
+                      if (!isCustomBrand) {
+                        setCustomBrandInput('');
+                      }
+                    }}
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: 'var(--color-muted)',
+                      fontSize: '0.72rem',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {isCustomBrand ? 'Pilih Dropdown' : 'Ketik Cepat'}
+                  </button>
+                </div>
+              </div>
+
+              {isCustomBrand ? (
+                <Input
+                  placeholder="Ketik merek (mis. Chitose / Apple)"
+                  value={customBrandInput}
+                  onChange={(e) => setCustomBrandInput(e.target.value)}
+                  required
+                />
+              ) : (
+                <select
+                  className="input-field"
+                  value={formData.brand}
+                  onChange={(e) => {
+                    if (e.target.value === '__ADD_MODAL__') {
+                      openNewBrandModal();
+                    } else if (e.target.value === '__CUSTOM__') {
+                      setIsCustomBrand(true);
+                      setCustomBrandInput('');
+                    } else {
+                      setFormData({ ...formData, brand: e.target.value });
+                    }
+                  }}
+                  required
+                >
+                  <option value="">-- Pilih Merek Terdaftar --</option>
+                  {brands.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                  <option value="__ADD_MODAL__">✨ + Daftarkan Merek Baru (Kategori & Sub)...</option>
+                  <option value="__CUSTOM__">✏️ + Ketik Merek Bebas...</option>
+                </select>
+              )}
+            </div>
+
+            {/* Model / Tipe Pabrikan */}
+            <div>
+              <Input
+                label="Model / Tipe Pabrikan *"
+                placeholder="mis. EB-X51 / ThinkPad E14 / HAA"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                required
+              />
+            </div>
+
+            {/* Varian / Spesifikasi Kunci */}
+            <div>
+              <Input
+                label="Varian / Spesifikasi Kunci"
+                placeholder="mis. 3800 Lumens / Core i5 16GB"
+                value={specVariant}
+                onChange={(e) => setSpecVariant(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {/* Baris 3: Nama Aset Standar (Auto-Generated) */}
+          <div
+            style={{
+              padding: '1rem',
+              borderRadius: 'var(--radius-md)',
+              background: 'var(--color-surface2)',
+              border: '1px solid var(--color-border)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.6rem',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem' }}>
+              <label style={{ ...labelStyle, marginBottom: 0, fontWeight: 700, color: 'var(--color-text)' }}>
+                Nama Aset Resmi di Katalog *
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.78rem', color: 'var(--color-muted)', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={autoNaming}
+                  onChange={(e) => setAutoNaming(e.target.checked)}
+                  style={{ cursor: 'pointer' }}
+                />
+                <span>⚡ Standarisasi Otomatis (Merek + Model + Spesifikasi)</span>
+              </label>
+            </div>
+
+            <Input
+              placeholder="Nama lengkap aset otomatis dibuat..."
+              value={formData.name}
+              onChange={(e) => {
+                setAutoNaming(false);
+                setFormData({ ...formData, name: e.target.value });
+              }}
+              required
+            />
+
+            {autoNaming && (
+              <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                <Sparkles size={13} style={{ color: 'var(--color-primary-light)' }} />
+                <span>Nama akan diperbarui otomatis saat Merek, Model, atau Spesifikasi di atas diubah.</span>
+              </div>
+            )}
+          </div>
+
+          {/* Baris 4: Kondisi, Status, Jumlah Stok, Nomor Seri */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '1rem' }}>
+            <Input
+              label="Jumlah Unit / Stok *"
+              type="number"
+              min="1"
+              value={formData.quantity}
+              onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
+              required
+            />
+
+            <Input
+              label="Nomor Seri / SN Fisik"
+              placeholder="SN-12345XYZ (opsional)"
+              value={formData.serialNumber}
+              onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })}
+            />
+
             <div>
               <label style={labelStyle}>Kondisi Fisik Awal</label>
               <select
@@ -263,29 +751,6 @@ function NewAssetForm() {
                 <option value="MAINTENANCE">Dalam Perawatan (MAINTENANCE)</option>
               </select>
             </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem' }}>
-            <Input
-              label="Jumlah Unit / Stok *"
-              type="number"
-              min="1"
-              value={formData.quantity}
-              onChange={(e) => setFormData({ ...formData, quantity: e.target.value })}
-              required
-            />
-            <Input
-              label="Merek / Brand"
-              placeholder="Epson / HP / Sony"
-              value={formData.brand}
-              onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-            />
-            <Input
-              label="Nomor Seri / SN"
-              placeholder="SN-12345XYZ"
-              value={formData.serialNumber}
-              onChange={(e) => setFormData({ ...formData, serialNumber: e.target.value })}
-            />
           </div>
 
           <div>
@@ -654,41 +1119,173 @@ function NewAssetForm() {
           )}
         </div>
 
-        {/* Seksi F: Foto */}
+        {/* Seksi F: Foto Aset */}
         <div style={sectionStyle}>
-          <div style={sectionTitleStyle}>F. Foto Aset (Opsional)</div>
-          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <input
-              className="input-field"
-              style={{ flex: 1, minWidth: '240px' }}
-              placeholder="https://images.unsplash.com/..."
-              value={formData.imageUrl}
-              onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
-            />
-            <button type="button" className="btn btn-secondary" style={{ whiteSpace: 'nowrap' }} onClick={handleAddImage}>
-              Tambah Foto
-            </button>
+          <div style={sectionTitleStyle}>
+            <ImageIcon size={18} style={{ color: 'var(--color-primary)' }} />
+            F. Dokumentasi Foto Fisik Aset
           </div>
+          <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)', marginTop: '-0.5rem', marginBottom: '0.75rem' }}>
+            Unggah satu atau beberapa foto fisik aset (tampak depan, samping, stiker nomor seri pabrik, aksesoris pendukung).
+          </p>
+
+          {/* Area Unggah Berkas Foto (Bisa Banyak Foto Sekaligus) */}
+          <div
+            style={{
+              border: '2px dashed var(--color-border)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '1.75rem 1rem',
+              textAlign: 'center',
+              background: 'var(--color-surface2)',
+              cursor: uploadingImages ? 'not-allowed' : 'pointer',
+              position: 'relative',
+              transition: 'all 0.2s',
+            }}
+          >
+            <input
+              type="file"
+              accept="image/*"
+              multiple
+              disabled={uploadingImages}
+              onChange={handleFileUpload}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                opacity: 0,
+                cursor: uploadingImages ? 'not-allowed' : 'pointer',
+              }}
+            />
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.6rem', pointerEvents: 'none' }}>
+              <div
+                style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '50%',
+                  background: 'rgba(79, 70, 229, 0.15)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'var(--color-primary-light)',
+                }}
+              >
+                {uploadingImages ? <Loader2 size={24} style={{ animation: 'spin 1s linear infinite' }} /> : <UploadCloud size={24} />}
+              </div>
+              <div>
+                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--color-text)' }}>
+                  {uploadingImages ? 'Sedang mengunggah foto...' : 'Klik untuk Pilih Berkas Foto atau Seret ke Sini'}
+                </span>
+                <p style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginTop: '0.2rem' }}>
+                  Dapat memilih beberapa foto sekaligus (JPG, PNG, WebP hingga 10MB/foto)
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Preview Grid Thumbnail Foto */}
           {formData.images.length > 0 && (
-            <div style={{ display: 'grid', gap: '0.75rem' }}>
-              {formData.images.map((img, idx) => (
-                <div
-                  key={idx}
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)' }}
-                >
-                  <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.82rem' }}>{img}</span>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    style={{ color: 'var(--color-danger)' }}
-                    onClick={() => handleRemoveImage(idx)}
+            <div style={{ marginTop: '0.5rem' }}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-muted)', marginBottom: '0.6rem' }}>
+                Foto Terunggah ({formData.images.length} foto):
+              </div>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))',
+                  gap: '0.75rem',
+                }}
+              >
+                {formData.images.map((img, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      position: 'relative',
+                      borderRadius: 'var(--radius-md)',
+                      overflow: 'hidden',
+                      border: idx === 0 ? '2px solid var(--color-primary-light)' : '1px solid var(--color-border)',
+                      aspectRatio: '1',
+                      background: '#0f172a',
+                    }}
                   >
-                    <X size={16} />
-                  </button>
-                </div>
-              ))}
+                    <img
+                      src={img}
+                      alt={`Foto Aset ${idx + 1}`}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                      }}
+                    />
+                    {idx === 0 && (
+                      <span
+                        style={{
+                          position: 'absolute',
+                          bottom: '4px',
+                          left: '4px',
+                          fontSize: '0.65rem',
+                          fontWeight: 700,
+                          background: 'var(--color-primary)',
+                          color: '#fff',
+                          padding: '0.1rem 0.4rem',
+                          borderRadius: '3px',
+                        }}
+                      >
+                        Sampul Utama
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(idx)}
+                      style={{
+                        position: 'absolute',
+                        top: '4px',
+                        right: '4px',
+                        width: '24px',
+                        height: '24px',
+                        borderRadius: '50%',
+                        background: 'rgba(0, 0, 0, 0.7)',
+                        color: '#ef4444',
+                        border: 'none',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        transition: 'all 0.2s',
+                      }}
+                      title="Hapus foto ini"
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
+
+          {/* Opsi Tambahan Input URL Manual */}
+          <details style={{ marginTop: '0.25rem', fontSize: '0.8rem', color: 'var(--color-muted)' }}>
+            <summary style={{ cursor: 'pointer', userSelect: 'none' }}>
+              Atau masukkan tautan URL gambar eksternal...
+            </summary>
+            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <input
+                className="input-field"
+                style={{ flex: 1, fontSize: '0.8rem', height: '36px' }}
+                placeholder="https://images.unsplash.com/..."
+                value={formData.imageUrl}
+                onChange={(e) => setFormData({ ...formData, imageUrl: e.target.value })}
+              />
+              <button
+                type="button"
+                className="btn btn-secondary btn-sm"
+                onClick={handleAddImage}
+              >
+                Tambah URL
+              </button>
+            </div>
+          </details>
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
@@ -698,6 +1295,119 @@ function NewAssetForm() {
           </Button>
         </div>
       </form>
+
+      {/* Modal Pendaftaran Merek Baru dengan Kategori & Subkategori */}
+      <Modal
+        isOpen={newBrandModalOpen}
+        onClose={() => setNewBrandModalOpen(false)}
+        title="Daftarkan Merek (Brand) Baru"
+      >
+        <form onSubmit={handleSaveNewBrand} style={{ display: 'flex', flexDirection: 'column', gap: '1rem', marginTop: '0.5rem' }}>
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.35rem' }}>
+              Nama Merek / Brand <span style={{ color: 'var(--color-danger)' }}>*</span>
+            </label>
+            <input
+              required
+              className="input-field"
+              placeholder="Contoh: MikroTik, Hikvision, Dell, Chitose..."
+              value={newBrandForm.name}
+              onChange={(e) => setNewBrandForm({ ...newBrandForm, name: e.target.value })}
+            />
+            <p style={{ fontSize: '0.72rem', color: 'var(--color-muted)', marginTop: '0.25rem' }}>
+              Gunakan penulisan baku (misal: "MikroTik", "Asus", "Chitose").
+            </p>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.35rem' }}>
+              1. Kategori Utama <span style={{ color: 'var(--color-danger)' }}>*</span>
+            </label>
+            <select
+              value={newBrandForm.categoryCode}
+              onChange={(e) => {
+                const catCode = e.target.value;
+                const parentCat = categories.find((c: any) => c.code === catCode || c.id === catCode);
+                const subCats = parentCat ? categories.filter((c: any) => c.parentId === parentCat.id) : [];
+                setNewBrandForm({
+                  ...newBrandForm,
+                  categoryCode: catCode,
+                  subCategoryCode: subCats.length > 0 ? subCats[0].code : '',
+                });
+              }}
+              className="input-field"
+            >
+              {categories
+                .filter((c: any) => !c.parentId)
+                .map((cat: any) => (
+                  <option key={cat.id} value={cat.code || cat.id}>
+                    [{cat.code}] {cat.name}
+                  </option>
+                ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.35rem' }}>
+              2. Subkategori Terkait
+            </label>
+            {(() => {
+              const parentCat = categories.find(
+                (c: any) => (c.code === newBrandForm.categoryCode || c.id === newBrandForm.categoryCode) && !c.parentId
+              );
+              const subCats = parentCat ? categories.filter((c: any) => c.parentId === parentCat.id) : [];
+
+              return subCats.length > 0 ? (
+                <select
+                  value={newBrandForm.subCategoryCode}
+                  onChange={(e) => setNewBrandForm({ ...newBrandForm, subCategoryCode: e.target.value })}
+                  className="input-field"
+                >
+                  <option value="">-- (Semua Subkategori / Umum) --</option>
+                  {subCats.map((sub: any) => (
+                    <option key={sub.id} value={sub.code || sub.id}>
+                      [{sub.code}] {sub.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div style={{ padding: '0.65rem 0.85rem', borderRadius: 'var(--radius-sm)', border: '1px dashed var(--color-border)', fontSize: '0.78rem', color: 'var(--color-muted)', background: 'var(--color-surface2)' }}>
+                  Kategori ini belum memiliki subkategori khusus. Merek akan terhubung secara umum ke kategori ini.
+                </div>
+              );
+            })()}
+            <p style={{ fontSize: '0.72rem', color: 'var(--color-muted)', marginTop: '0.25rem' }}>
+              Merek akan otomatis tersedia dan diprioritaskan saat staf memilih subkategori ini.
+            </p>
+          </div>
+
+          <div>
+            <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-text)', marginBottom: '0.35rem' }}>
+              Keterangan / Deskripsi (Opsional)
+            </label>
+            <input
+              className="input-field"
+              placeholder="Contoh: Perangkat switch, router & Wi-Fi outdoor"
+              value={newBrandForm.description}
+              onChange={(e) => setNewBrandForm({ ...newBrandForm, description: e.target.value })}
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--color-border)' }}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setNewBrandModalOpen(false)}
+              disabled={savingBrand}
+            >
+              Batal
+            </Button>
+            <Button type="submit" variant="primary" disabled={savingBrand}>
+              {savingBrand ? 'Menyimpan...' : 'Simpan & Terapkan'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

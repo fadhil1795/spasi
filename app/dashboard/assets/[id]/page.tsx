@@ -35,7 +35,11 @@ export default function AssetDetailPage() {
   // Mutation/Transfer modal state
   const [transferModalOpen, setTransferModalOpen] = useState(false);
   const [locations, setLocations] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
   const [targetLocationId, setTargetLocationId] = useState('');
+  const [targetDepartmentId, setTargetDepartmentId] = useState('');
+  const [targetPicName, setTargetPicName] = useState('');
+  const [autoApproveTransfer, setAutoApproveTransfer] = useState(true);
   const [transferReason, setTransferReason] = useState('');
   const [transferring, setTransferring] = useState(false);
 
@@ -67,7 +71,7 @@ export default function AssetDetailPage() {
 
         // Generate QR code with direct link
         const qrContent = typeof window !== 'undefined'
-          ? `${window.location.origin}/assets/${data.id}`
+          ? `${window.location.origin}/dashboard/assets/${data.id}`
           : data.code;
         const qrUrl = await QRCode.toDataURL(qrContent, {
           width: 200,
@@ -86,43 +90,52 @@ export default function AssetDetailPage() {
 
   const openTransferModal = async () => {
     try {
-      const res = await fetch('/api/rooms');
-      if (res.ok) {
-        setLocations(await res.json());
-      }
-      setTargetLocationId(asset?.locationId || '');
+      const [resR, resD] = await Promise.all([
+        fetch('/api/rooms'),
+        fetch('/api/departments'),
+      ]);
+      if (resR.ok) setLocations(await resR.json());
+      if (resD.ok) setDepartments(await resD.json());
+
+      setTargetLocationId(asset?.locationId || 'NONE');
+      setTargetDepartmentId(asset?.departmentId || 'NONE');
+      setTargetPicName(asset?.picName || asset?.location?.picName || asset?.department?.headName || '');
+      setAutoApproveTransfer(canManage);
       setTransferReason('');
       setTransferModalOpen(true);
     } catch {
-      showToast('Gagal memuat daftar lokasi ruangan', 'error');
+      showToast('Gagal memuat daftar lokasi & unit', 'error');
     }
   };
 
   const handleExecuteTransfer = async () => {
-    if (!targetLocationId && targetLocationId === asset?.locationId) {
-      showToast('Pilih lokasi tujuan baru yang berbeda', 'warning');
-      return;
-    }
-
     try {
       setTransferring(true);
-      const res = await fetch(`/api/assets/${id}`, {
-        method: 'PUT',
+      const res = await fetch('/api/transfers', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ...asset,
-          locationId: targetLocationId || null,
-          transferReason: transferReason.trim() || 'Mutasi lokasi aset via dashboard',
+          assetId: asset.id,
+          toLocationId: targetLocationId || 'NONE',
+          toDepartmentId: targetDepartmentId || 'NONE',
+          toPicName: targetPicName.trim(),
+          reason: transferReason.trim() || 'Mutasi penempatan aset via halaman detail aset',
+          autoApprove: canManage && autoApproveTransfer,
         }),
       });
 
+      const data = await res.json();
       if (res.ok) {
-        showToast('Mutasi penempatan aset berhasil dicatat!', 'success');
+        showToast(
+          data.status === 'APPROVED'
+            ? 'Mutasi penempatan aset berhasil dicatat & disetujui!'
+            : 'Permohonan mutasi aset berhasil diajukan dan menunggu persetujuan.',
+          'success'
+        );
         setTransferModalOpen(false);
         fetchAssetData();
       } else {
-        const err = await res.json();
-        showToast(err.error || 'Gagal memindahkan lokasi aset', 'error');
+        showToast(data.error || 'Gagal memindahkan lokasi aset', 'error');
       }
     } catch {
       showToast('Terjadi kesalahan jaringan', 'error');
@@ -239,9 +252,9 @@ export default function AssetDetailPage() {
         {/* Toolbar Buttons */}
         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
           {asset.status !== 'DISPOSED' && (
-            <Button variant="secondary" size="sm" onClick={openTransferModal}>
+            <Link href={`/dashboard/transfers/new?assetId=${asset.id}`} className="btn btn-secondary btn-sm">
               <ArrowRightLeft size={15} /> Mutasi Lokasi
-            </Button>
+            </Link>
           )}
           <Link href={`/dashboard/assets/qr-labels?ids=${asset.id}`} className="btn btn-secondary btn-sm">
             <Printer size={15} /> Cetak Label QR
@@ -377,6 +390,10 @@ export default function AssetDetailPage() {
                 <strong>{asset.department?.name || 'Milik Pusat / Umum'}</strong>
               </div>
               <div>
+                <span style={{ color: 'var(--color-muted)' }}>Penanggung Jawab (PIC):</span>{' '}
+                <strong>{asset.picName || asset.location?.picName || asset.department?.headName || 'Belum Ditentukan'}</strong>
+              </div>
+              <div>
                 <span style={{ color: 'var(--color-muted)' }}>Tipe Penempatan:</span>{' '}
                 <strong>{asset.isFixedToRoom ? '🏢 Terikat Ruangan (Fixed)' : '📦 Aset Bergerak (Mobile)'}</strong>
               </div>
@@ -472,7 +489,7 @@ export default function AssetDetailPage() {
                 marginBottom: '-2px',
               }}
             >
-              📅 Riwayat Peminjaman & Sewa
+              📅 Riwayat Peminjaman &amp; Sewa ({(asset.loans?.length || 0) + (asset.rentals?.length || 0)})
             </button>
             <button
               onClick={() => setActiveTab('maintenance')}
@@ -573,9 +590,9 @@ export default function AssetDetailPage() {
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Riwayat Mutasi & Perpindahan Fisik</h3>
                   <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)' }}>Catatan perpindahan penempatan sarana antar gedung, ruangan, atau gudang.</p>
                 </div>
-                <Button variant="secondary" size="sm" onClick={openTransferModal}>
+                <Link href={`/dashboard/transfers/new?assetId=${asset.id}`} className="btn btn-secondary btn-sm">
                   <ArrowRightLeft size={14} /> Mutasi Lokasi Baru
-                </Button>
+                </Link>
               </div>
 
               {asset.transfers && asset.transfers.length > 0 ? (
@@ -594,13 +611,34 @@ export default function AssetDetailPage() {
                       }}
                     >
                       <div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.9rem', fontWeight: 700, marginBottom: '0.25rem', flexWrap: 'wrap' }}>
                           <span>{t.fromLocation || 'Gudang'}</span>
                           <span style={{ color: 'var(--color-primary)' }}>➔</span>
                           <span style={{ color: 'var(--color-success)' }}>{t.toLocation}</span>
+                          {t.status && (
+                            <span
+                              style={{
+                                fontSize: '0.7rem',
+                                padding: '0.15rem 0.5rem',
+                                borderRadius: '999px',
+                                fontWeight: 800,
+                                background: t.status === 'PENDING' ? 'rgba(245,158,11,0.12)' : t.status === 'REJECTED' ? 'rgba(239,68,68,0.12)' : 'rgba(16,185,129,0.12)',
+                                color: t.status === 'PENDING' ? '#f59e0b' : t.status === 'REJECTED' ? '#ef4444' : '#10b981',
+                              }}
+                            >
+                              {t.status}
+                            </span>
+                          )}
                         </div>
+                        {(t.fromDepartment || t.toDepartment || t.toPicName) && (
+                          <div style={{ fontSize: '0.78rem', color: 'var(--color-muted)', marginBottom: '0.2rem' }}>
+                            {t.toDepartment && <span>Unit: {t.fromDepartment || 'Pusat'} ➔ <strong>{t.toDepartment}</strong> • </span>}
+                            {t.toPicName && <span>PIC: {t.fromPicName || '-'} ➔ <strong>{t.toPicName}</strong></span>}
+                          </div>
+                        )}
                         <div style={{ fontSize: '0.8rem', color: 'var(--color-muted)' }}>
                           Alasan: <em>&quot;{t.reason || 'Mutasi penempatan'}&quot;</em> • Oleh: <strong>{t.transferredBy}</strong>
+                          {t.approvedBy && <> • Disetujui: <strong>{t.approvedBy}</strong></>}
                         </div>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '0.4rem' }}>
@@ -635,16 +673,58 @@ export default function AssetDetailPage() {
                 <div>
                   <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '0.75rem', color: 'var(--color-muted)' }}>Peminjaman Internal</h4>
                   {asset.loans && asset.loans.length > 0 ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
                       {asset.loans.map((l: any) => (
-                        <div key={l.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '0.75rem 1rem', border: '1px solid var(--color-border)', borderRadius: 'var(--radius-sm)', fontSize: '0.85rem' }}>
-                          <div>
-                            <strong>{l.user?.name || 'Peminjam'}</strong> • Tujuan: {l.purpose}
-                            <div style={{ fontSize: '0.78rem', color: 'var(--color-muted)' }}>
-                              {formatDate(l.startDate)} s.d. {formatDate(l.endDate)}
+                        <div
+                          key={l.id}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: '1rem',
+                            flexWrap: 'wrap',
+                            padding: '0.85rem 1rem',
+                            border: '1px solid var(--color-border)',
+                            borderRadius: 'var(--radius-sm)',
+                            fontSize: '0.85rem',
+                          }}
+                        >
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                              <span style={{ fontFamily: 'monospace', fontWeight: 800, color: 'var(--color-primary-light)' }}>
+                                #{l.ticketNumber}
+                              </span>
+                              {l.groupCode && (
+                                <span style={{ fontSize: '0.72rem', fontFamily: 'monospace', color: 'var(--color-muted)' }}>
+                                  (Paket #{l.groupCode})
+                                </span>
+                              )}
+                              <strong>{l.user?.name || 'Peminjam'}</strong>
+                              <span style={{ color: 'var(--color-muted)' }}>• {l.quantity || 1} unit</span>
+                            </div>
+                            <div style={{ fontSize: '0.8rem', color: 'var(--color-text)' }}>
+                              Tujuan: {l.purpose}
+                            </div>
+                            <div style={{ fontSize: '0.76rem', color: 'var(--color-muted)', display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                              <span>Jadwal: {formatDate(l.startDate)} s.d. {formatDate(l.endDate)}</span>
+                              {l.checkInTime && (
+                                <span style={{ color: 'var(--color-info)' }}>
+                                  Ambil: {formatDate(l.checkInTime, 'dd MMM yyyy, HH:mm')}
+                                </span>
+                              )}
+                              {l.checkOutTime && (
+                                <span style={{ color: 'var(--color-success)' }}>
+                                  Kembali: {formatDate(l.checkOutTime, 'dd MMM yyyy, HH:mm')}
+                                </span>
+                              )}
                             </div>
                           </div>
-                          <Badge status={l.status} />
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            <Badge status={l.status} />
+                            <Link href={`/dashboard/loans/${l.id}`} className="btn btn-ghost btn-sm" style={{ fontSize: '0.75rem' }}>
+                              Detail ↗
+                            </Link>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -685,9 +765,14 @@ export default function AssetDetailPage() {
                   <h3 style={{ fontSize: '1.1rem', fontWeight: 800 }}>Riwayat Servis & Perawatan</h3>
                   <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)' }}>Catatan perbaikan teknis, penggantian suku cadang, dan kalibrasi rutin.</p>
                 </div>
-                <Link href="/dashboard/maintenance" className="btn btn-secondary btn-sm">
-                  Kelola Modul Servis
-                </Link>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <Link href={`/dashboard/maintenance?new=true&assetId=${asset.id}`} className="btn btn-primary btn-sm">
+                    <Wrench size={14} /> Catat Servis Aset Ini
+                  </Link>
+                  <Link href="/dashboard/maintenance" className="btn btn-secondary btn-sm">
+                    Kelola Modul Servis
+                  </Link>
+                </div>
               </div>
 
               {asset.maintenance && asset.maintenance.length > 0 ? (
@@ -735,16 +820,54 @@ export default function AssetDetailPage() {
               <select
                 className="input-field"
                 value={targetLocationId}
-                onChange={(e) => setTargetLocationId(e.target.value)}
+                onChange={(e) => {
+                  const locId = e.target.value;
+                  const targetLoc = locations.find((l: any) => l.id === locId);
+                  setTargetLocationId(locId);
+                  if (targetLoc?.picName) setTargetPicName(targetLoc.picName);
+                }}
                 style={{ width: '100%' }}
               >
-                <option value="">-- Pos / Gudang Penyimpanan Umum --</option>
+                <option value="NONE">-- Pos / Gudang Penyimpanan Umum --</option>
                 {locations.map((l: any) => (
                   <option key={l.id} value={l.id}>
                     {l.name || l.building} (Lt. {l.floor || '1'} {l.room ? `- ${l.room}` : ''})
                   </option>
                 ))}
               </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+                Unit / Fakultas Tujuan (Pemindahan Antar-Unit)
+              </label>
+              <select
+                className="input-field"
+                value={targetDepartmentId}
+                onChange={(e) => setTargetDepartmentId(e.target.value)}
+                style={{ width: '100%' }}
+              >
+                <option value="NONE">-- Inventaris Pusat Instansi --</option>
+                {departments.map((d: any) => (
+                  <option key={d.id} value={d.id}>
+                    [{d.code}] {d.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.4rem' }}>
+                Nama Penanggung Jawab (PIC) Baru
+              </label>
+              <input
+                type="text"
+                className="input-field"
+                placeholder="Contoh: Bpk. Hendra Wijaya, S.T."
+                value={targetPicName}
+                onChange={(e) => setTargetPicName(e.target.value)}
+                style={{ width: '100%' }}
+              />
             </div>
 
             <div>
@@ -759,6 +882,17 @@ export default function AssetDetailPage() {
                 onChange={(e) => setTransferReason(e.target.value)}
               />
             </div>
+
+            {canManage && (
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', fontWeight: 600, cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={autoApproveTransfer}
+                  onChange={(e) => setAutoApproveTransfer(e.target.checked)}
+                />
+                <span>Langsung Setujui &amp; Terapkan Mutasi Sekarang</span>
+              </label>
+            )}
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
               <Button variant="secondary" onClick={() => setTransferModalOpen(false)} disabled={transferring}>

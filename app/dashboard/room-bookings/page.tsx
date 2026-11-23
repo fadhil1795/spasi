@@ -17,9 +17,9 @@ import { PaymentModal } from '@/components/public/PaymentModal';
 import { RoomScheduleCalendar } from '@/components/public/RoomScheduleCalendar';
 import { AssetRentalCalendar } from '@/components/public/AssetRentalCalendar';
 
-type BookingStatus = 'SEMUA' | 'PENDING' | 'CONFIRMED' | 'ACTIVE' | 'COMPLETED' | 'CANCELLED';
+type BookingStatus = 'SEMUA' | 'PENDING' | 'APPROVED' | 'CONFIRMED' | 'ACTIVE' | 'RETURN_REQUESTED' | 'COMPLETED' | 'CANCELLED';
 
-const FILTER_PILLS: BookingStatus[] = ['SEMUA', 'PENDING', 'CONFIRMED', 'ACTIVE', 'COMPLETED', 'CANCELLED'];
+const FILTER_PILLS: BookingStatus[] = ['SEMUA', 'PENDING', 'APPROVED', 'CONFIRMED', 'ACTIVE', 'RETURN_REQUESTED', 'COMPLETED', 'CANCELLED'];
 
 function CountdownCell({ endTime }: { endTime: string }) {
   const [remaining, setRemaining] = useState('');
@@ -69,6 +69,7 @@ export default function UnifiedBookingsHistoryPage() {
   const [rejectNotes, setRejectNotes] = useState('');
   const [previewModalOpen, setPreviewModalOpen] = useState(false);
   const [previewDocUrl, setPreviewDocUrl] = useState('');
+  const [previewDocIndex, setPreviewDocIndex] = useState(0);
   const [isPaymentAsset, setIsPaymentAsset] = useState(false);
   const [isPaymentPelunasan, setIsPaymentPelunasan] = useState(false);
 
@@ -145,20 +146,26 @@ export default function UnifiedBookingsHistoryPage() {
     }
   };
 
-  const handleVerifyPayment = async (id: string) => {
+  const handleVerifyPayment = async (b: any) => {
     try {
-      setConfirmingId(id);
-      const res = await fetch(`/api/room-bookings/${id}`, {
+      setConfirmingId(b.id);
+      const isInitialDp = b.paymentScheme === 'DOWN_PAYMENT' && (b.paidAmount || 0) === 0;
+      const res = await fetch(`/api/room-bookings/${b.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          payStatus: 'PAID',
-          bookingStatus: 'CONFIRMED',
+          payStatus: isInitialDp ? 'DOWN_PAYMENT' : 'PAID',
+          bookingStatus: ['PENDING', 'APPROVED'].includes(b.bookingStatus) ? 'CONFIRMED' : b.bookingStatus,
         }),
       });
 
       if (res.ok) {
-        showToast('Pembayaran berhasil diverifikasi & booking dikonfirmasi!', 'success');
+        showToast(
+          isInitialDp
+            ? 'DP 50% diverifikasi & booking dikonfirmasi! Sisa tagihan dapat dilunasi kemudian.'
+            : 'Pembayaran Lunas berhasil diverifikasi & booking dikonfirmasi!',
+          'success'
+        );
         fetchAllBookings();
       } else {
         const err = await res.json();
@@ -214,13 +221,15 @@ export default function UnifiedBookingsHistoryPage() {
     }
   };
 
-  const filteredRoomBookings = roomBookings.filter((b) =>
-    activeFilter === 'SEMUA' ? true : b.bookingStatus === activeFilter
-  );
+  const matchesStatus = (statusVal: string, filter: BookingStatus) => {
+    if (filter === 'SEMUA') return true;
+    if (filter === 'COMPLETED') return ['COMPLETED', 'COMPLETED_WITH_CLAIM', 'RETURNED'].includes(statusVal);
+    return statusVal === filter;
+  };
 
-  const filteredAssetRentals = assetRentals.filter((r) =>
-    activeFilter === 'SEMUA' ? true : r.status === activeFilter
-  );
+  const filteredRoomBookings = roomBookings.filter((b) => matchesStatus(b.bookingStatus, activeFilter));
+
+  const filteredAssetRentals = assetRentals.filter((r) => matchesStatus(r.status, activeFilter));
 
   const payBadgeStyle = (payStatus: string) => {
     switch (payStatus?.toUpperCase()) {
@@ -343,7 +352,7 @@ export default function UnifiedBookingsHistoryPage() {
                   <FilterPill
                     key={pill}
                     label={pill}
-                    count={pill === 'SEMUA' ? roomBookings.length : roomBookings.filter((b) => b.bookingStatus === pill).length}
+                    count={pill === 'SEMUA' ? roomBookings.length : roomBookings.filter((b) => matchesStatus(b.bookingStatus, pill)).length}
                     active={activeFilter === pill}
                     onClick={() => setActiveFilter(pill)}
                   />
@@ -378,9 +387,14 @@ export default function UnifiedBookingsHistoryPage() {
                             {b.bookingNumber}
                           </td>
                           <td style={{ padding: '1rem' }}>
-                            <div style={{ fontWeight: 700 }}>{b.location?.name}</div>
+                            <div style={{ fontWeight: 700 }}>
+                              {b.location?.name || 'Paket Peralatan Sarpras'}
+                            </div>
                             <div style={{ fontSize: '0.78rem', color: 'var(--color-muted)' }}>
-                              {b.location?.building} • {b.location?.code}
+                              {b.location
+                                ? `${b.location.building || '-'} • ${b.location.code || '-'}`
+                                : `${b.addonAssets?.length || 0} Peralatan Sarpras`}
+                              {b.location && b.addonAssets?.length > 0 && ` • +${b.addonAssets.length} Aset`}
                             </div>
                           </td>
                           <td style={{ padding: '1rem' }}>
@@ -410,6 +424,50 @@ export default function UnifiedBookingsHistoryPage() {
                               </a>
 
                               {/* User Actions */}
+                              {['PENDING', 'PENDING_L1', 'PENDING_L2'].includes(b.bookingStatus) && (
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  onClick={() => router.push(`/dashboard/room-bookings/new?editId=${b.id}`)}
+                                  title="Edit pesanan selama belum disetujui admin"
+                                >
+                                  ✏️ Edit
+                                </Button>
+                              )}
+
+                              {['PENDING', 'PENDING_L1', 'PENDING_L2', 'APPROVED', 'CONFIRMED'].includes(b.bookingStatus) && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  style={{ color: 'var(--color-danger)' }}
+                                  isLoading={confirmingId === b.id}
+                                  onClick={async () => {
+                                    if (!confirm(`Batalkan pesanan #${b.bookingNumber}?`)) return;
+                                    try {
+                                      setConfirmingId(b.id);
+                                      const res = await fetch(`/api/room-bookings/${b.id}`, {
+                                        method: 'PATCH',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ bookingStatus: 'CANCELLED', notes: 'Dibatalkan oleh pengguna' }),
+                                      });
+                                      if (res.ok) {
+                                        showToast(`Pesanan #${b.bookingNumber} berhasil dibatalkan`, 'success');
+                                        fetchAllBookings();
+                                      } else {
+                                        const err = await res.json().catch(() => ({}));
+                                        showToast(err.error || 'Gagal membatalkan pesanan', 'error');
+                                      }
+                                    } catch {
+                                      showToast('Terjadi kesalahan koneksi', 'error');
+                                    } finally {
+                                      setConfirmingId(null);
+                                    }
+                                  }}
+                                >
+                                  ❌ Batalkan
+                                </Button>
+                              )}
+
                               {isBorrower && b.bookingStatus === 'PENDING' && (
                                 <span style={{ fontSize: '0.75rem', color: 'var(--color-warning)', fontWeight: 600, padding: '0.35rem 0.65rem', borderRadius: 'var(--radius-sm)', background: 'rgba(245,158,11,0.12)', border: '1px solid rgba(245,158,11,0.3)' }} title="Pembayaran dapat dilakukan setelah pengajuan sewa disetujui oleh Admin/Kepala">
                                   ⏳ Menunggu Persetujuan Admin
@@ -456,7 +514,7 @@ export default function UnifiedBookingsHistoryPage() {
                               {/* Admin Actions: Step 2 Payment Verification */}
                               {!isBorrower && b.payStatus === 'PENDING_VERIFICATION' && (
                                 <>
-                                  <Button variant="primary" size="sm" style={{ background: 'var(--color-success)', color: '#FFFFFF' }} isLoading={confirmingId === b.id} onClick={() => handleVerifyPayment(b.id)}>
+                                  <Button variant="primary" size="sm" style={{ background: 'var(--color-success)', color: '#FFFFFF' }} isLoading={confirmingId === b.id} onClick={() => handleVerifyPayment(b)}>
                                     <CalendarCheck size={14} /> Verifikasi Struk
                                   </Button>
                                   <Button variant="secondary" size="sm" style={{ color: 'var(--color-danger)', borderColor: 'var(--color-danger)' }} isLoading={confirmingId === b.id} onClick={() => {
@@ -470,9 +528,9 @@ export default function UnifiedBookingsHistoryPage() {
                                 </>
                               )}
 
-                              {/* SOP Check-In Handover per Komponen */}
+                              {/* SOP Check-In Handover Ruangan & Aset */}
                               {!isBorrower && b.bookingStatus === 'CONFIRMED' && (
-                                <Button variant="secondary" size="sm" onClick={() => router.push(`/dashboard/handovers/${b.id}?type=CHECK_IN`)}>
+                                <Button variant="secondary" size="sm" onClick={() => router.push(`/dashboard/room-bookings/${b.id}/checkin`)}>
                                   <LogIn size={14} /> Serah Terima Masuk
                                 </Button>
                               )}
@@ -481,22 +539,27 @@ export default function UnifiedBookingsHistoryPage() {
                                 <Button variant="secondary" size="sm" onClick={async () => {
                                   if (!confirm('Ajukan pengembalian / selesai pemakaian ruangan sekarang? Petugas akan melakukan verifikasi & inspeksi fisik.')) return;
                                   try {
-                                    await fetch(`/api/room-bookings/${b.id}`, {
+                                    const res = await fetch(`/api/room-bookings/${b.id}`, {
                                       method: 'PATCH',
                                       headers: { 'Content-Type': 'application/json' },
                                       body: JSON.stringify({ bookingStatus: 'RETURN_REQUESTED' }),
                                     });
-                                    showToast('Pengajuan pengembalian ruangan berhasil dikirim! Petugas akan melakukan inspeksi check-out.', 'success');
-                                    fetchAllBookings();
+                                    if (res.ok) {
+                                      showToast('Pengajuan pengembalian ruangan berhasil dikirim! Petugas akan melakukan inspeksi check-out.', 'success');
+                                      fetchAllBookings();
+                                    } else {
+                                      const err = await res.json().catch(() => ({}));
+                                      showToast(err.error || 'Gagal mengajukan pengembalian', 'error');
+                                    }
                                   } catch { showToast('Gagal mengajukan pengembalian', 'error'); }
                                 }}>
                                   <LogOut size={14} /> Ajukan Selesai Pemakaian
                                 </Button>
                               )}
 
-                              {/* SOP Check-Out Handover per Komponen */}
+                              {/* SOP Check-Out Handover Ruangan & Aset */}
                               {!isBorrower && ['ACTIVE', 'RETURN_REQUESTED'].includes(b.bookingStatus) && (
-                                <Button variant="primary" size="sm" onClick={() => router.push(`/dashboard/handovers/${b.id}?type=CHECK_OUT`)}>
+                                <Button variant="primary" size="sm" onClick={() => router.push(`/dashboard/room-bookings/${b.id}/checkout`)}>
                                   <LogOut size={14} /> Serah Terima Keluar
                                 </Button>
                               )}
@@ -508,6 +571,7 @@ export default function UnifiedBookingsHistoryPage() {
                                   size="sm"
                                   onClick={() => {
                                     setPreviewDocUrl(b.supportingDocUrl);
+                                    setPreviewDocIndex(0);
                                     setPreviewModalOpen(true);
                                   }}
                                   style={{ display: 'inline-flex', alignItems: 'center', gap: '0.2rem' }}
@@ -700,25 +764,86 @@ export default function UnifiedBookingsHistoryPage() {
       <Modal
         isOpen={previewModalOpen}
         onClose={() => setPreviewModalOpen(false)}
-        title="Verifikasi Dokumen Pendukung Sewa Ruangan"
+        title="Verifikasi Dokumen Pendukung Sarpras"
       >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-          <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)' }}>
-            Periksa keabsahan dan keaslian dokumen pendukung di bawah secara langsung.
-          </p>
-          <div style={{ border: '1px solid var(--color-border)', borderRadius: 'var(--radius-md)', overflow: 'hidden', height: '450px', background: 'var(--color-surface2)' }}>
-            <iframe
-              src={previewDocUrl}
-              style={{ width: '100%', height: '100%', border: 'none' }}
-              title="Pratinjau Dokumen BAST/Permit"
-            />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Button variant="secondary" onClick={() => setPreviewModalOpen(false)}>
-              Tutup Pratinjau
-            </Button>
-          </div>
-        </div>
+        {(() => {
+          let docList: string[] = [];
+          if (previewDocUrl) {
+            try {
+              const parsed = JSON.parse(previewDocUrl);
+              if (Array.isArray(parsed)) {
+                docList = parsed.filter((u): u is string => typeof u === 'string' && u.trim().length > 0);
+              } else if (typeof parsed === 'string') {
+                docList = [parsed];
+              }
+            } catch {
+              docList = [previewDocUrl];
+            }
+          }
+          const activeUrl = docList[previewDocIndex] || docList[0] || '';
+          const isImage = /\.(png|jpe?g|webp|gif|bmp)(\?.*)?$/i.test(activeUrl);
+          const docLabels = ['KTP / KTM', 'Surat Kegiatan'];
+
+          return (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)' }}>
+                Periksa keabsahan dan keaslian dokumen pendukung di bawah secara langsung.
+              </p>
+              {docList.length > 1 && (
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {docList.map((url, idx) => (
+                    <Button
+                      key={`${url}-${idx}`}
+                      variant={previewDocIndex === idx ? 'primary' : 'secondary'}
+                      size="sm"
+                      onClick={() => setPreviewDocIndex(idx)}
+                    >
+                      {docLabels[idx] || `Dokumen ${idx + 1}`}
+                    </Button>
+                  ))}
+                </div>
+              )}
+              <div
+                style={{
+                  border: '1px solid var(--color-border)',
+                  borderRadius: 'var(--radius-md)',
+                  overflow: 'hidden',
+                  height: '450px',
+                  background: 'var(--color-surface2)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                {!activeUrl ? (
+                  <div style={{ color: 'var(--color-muted)', fontSize: '0.85rem' }}>Dokumen tidak tersedia.</div>
+                ) : isImage ? (
+                  <img
+                    src={activeUrl}
+                    alt="Pratinjau Dokumen Pendukung"
+                    style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }}
+                  />
+                ) : (
+                  <iframe
+                    src={activeUrl}
+                    style={{ width: '100%', height: '100%', border: 'none' }}
+                    title="Pratinjau Dokumen BAST/Permit"
+                  />
+                )}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                {activeUrl ? (
+                  <a href={activeUrl} target="_blank" rel="noopener noreferrer" className="btn btn-ghost btn-sm">
+                    Buka di Tab Baru ↗
+                  </a>
+                ) : <span />}
+                <Button variant="secondary" onClick={() => setPreviewModalOpen(false)}>
+                  Tutup Pratinjau
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
       </Modal>
 
       {/* ── MODAL: ALASAN PENOLAKAN WAJIB (SOP LANGKAH 2) ── */}

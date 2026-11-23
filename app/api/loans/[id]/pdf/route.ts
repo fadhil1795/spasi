@@ -23,6 +23,29 @@ export async function GET(request: Request, { params }: { params: { id: string }
       return NextResponse.json({ error: 'Loan tidak ditemukan' }, { status: 404 });
     }
 
+    const createdMs = new Date(loan.createdAt).getTime();
+    const groupLoans = await prisma.loan.findMany({
+      where: loan.groupCode
+        ? { groupCode: loan.groupCode }
+        : {
+            userId: loan.userId,
+            startDate: loan.startDate,
+            endDate: loan.endDate,
+            purpose: loan.purpose,
+            createdAt: {
+              gte: new Date(createdMs - 5000),
+              lte: new Date(createdMs + 5000),
+            },
+          },
+      include: {
+        asset: true,
+        handoverLog: true,
+      },
+      orderBy: { ticketNumber: 'asc' },
+    });
+    const loansToRender = groupLoans.length > 0 ? groupLoans : [loan];
+    const isMulti = loansToRender.length > 1;
+
     const institution = tpl?.institutionName || 'SPASI — Sistem Pencatatan Aset & Sewa Instansi';
     const institutionSub = tpl?.institutionSubtitle || 'Layanan Pengelolaan Ruangan, Fasilitas & Inventaris Resmi';
     const logoUrl = tpl?.institutionLogoUrl || '';
@@ -34,20 +57,42 @@ export async function GET(request: Request, { params }: { params: { id: string }
     const docTitle = 'BERITA ACARA SERAH TERIMA (BAST) & SURAT JALAN PINJAM ASET';
 
     let handoverHtml = '';
-    if (loan.handoverLog) {
-      let componentsList: any[] = [];
-      try {
-        componentsList = JSON.parse(loan.handoverLog.components || '[]');
-      } catch (e) {
-        console.error(e);
+    const handoverItems = loansToRender.filter((l) => l.handoverLog);
+    if (handoverItems.length > 0) {
+      const combinedRows: string[] = [];
+      let rowNum = 0;
+      for (const l of handoverItems) {
+        let comps: any[] = [];
+        try {
+          comps = JSON.parse(l.handoverLog?.components || '[]');
+        } catch (e) {
+          console.error(e);
+        }
+        for (const c of comps) {
+          rowNum++;
+          const condText = c.condition || 'Baik';
+          const missingText = c.isMissing
+            ? '<span style="color:#b91c1c;font-weight:700;">Hilang</span>'
+            : '<span style="color:#10b981;">Lengkap</span>';
+          const damageStyle = c.isDamaged ? 'color:#b91c1c;font-weight:700;' : 'color:#10b981;';
+          combinedRows.push(`
+          <tr>
+            <td style="text-align:center">${rowNum}</td>
+            <td><strong>${isMulti ? `${l.asset?.name} — ` : ''}${c.name}</strong></td>
+            <td style="text-align:center; ${damageStyle}">${condText}</td>
+            <td style="text-align:center;">${missingText}</td>
+            <td>${c.notes || '-'}</td>
+          </tr>`);
+        }
       }
 
-      if (componentsList.length > 0) {
+      const firstLog = handoverItems[0].handoverLog!;
+      if (combinedRows.length > 0) {
         handoverHtml = `
     <!-- HASIL INSPEKSI SERAH TERIMA -->
     <div class="section-title">Berita Acara Pemeriksaan Fisik &amp; Kelengkapan</div>
     <div style="font-size:12px; margin-bottom:8px; color:#475569; line-height:1.5;">
-      Telah dilakukan pemeriksaan kondisi fisik aset oleh Petugas Pemeriksa (<strong>${loan.handoverLog.inspectorName}</strong>) tipe <strong>${loan.handoverLog.type}</strong> pada tanggal <strong>${formatDate(loan.handoverLog.updatedAt, 'dd MMMM yyyy, HH:mm')}</strong> dengan rincian checklist komponen sebagai berikut:
+      Telah dilakukan pemeriksaan kondisi fisik aset oleh Petugas Pemeriksa (<strong>${firstLog.inspectorName}</strong>) tipe <strong>${firstLog.type}</strong> pada tanggal <strong>${formatDate(firstLog.updatedAt, 'dd MMMM yyyy, HH:mm')}</strong> dengan rincian checklist komponen sebagai berikut:
     </div>
     <table class="items-table" style="margin-bottom:24px;">
       <thead>
@@ -60,19 +105,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
         </tr>
       </thead>
       <tbody>
-        ${componentsList.map((c: any, idx: number) => {
-          let condText = c.condition || 'Baik';
-          let missingText = c.isMissing ? '<span style="color:#b91c1c;font-weight:700;">Hilang</span>' : '<span style="color:#10b981;">Lengkap</span>';
-          let damageStyle = c.isDamaged ? 'color:#b91c1c;font-weight:700;' : 'color:#10b981;';
-          return `
-          <tr>
-            <td style="text-align:center">${idx + 1}</td>
-            <td><strong>${c.name}</strong></td>
-            <td style="text-align:center; ${damageStyle}">${condText}</td>
-            <td style="text-align:center;">${missingText}</td>
-            <td>${c.notes || '-'}</td>
-          </tr>`;
-        }).join('')}
+        ${combinedRows.join('')}
       </tbody>
     </table>
         `;
@@ -206,7 +239,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
     </div>
 
     <div class="doc-title">${docTitle}</div>
-    <div class="doc-subtitle">Nomor Tiket: ${loan.ticketNumber}</div>
+    <div class="doc-subtitle">Nomor Tiket: ${loan.groupCode || loan.ticketNumber}${isMulti ? ` (${loansToRender.length} Jenis Aset)` : ''}</div>
 
     <div class="info-grid">
       <div class="info-box primary">
@@ -220,6 +253,8 @@ export async function GET(request: Request, { params }: { params: { id: string }
         <div class="info-row"><div class="label">Tanggal Dibuat</div><div class="val">${formatDate(loan.createdAt, 'dd MMMM yyyy, HH:mm')}</div></div>
         <div class="info-row"><div class="label">Mulai Pinjam</div><div class="val">${formatDate(loan.startDate, 'dd MMMM yyyy')}</div></div>
         <div class="info-row"><div class="label">Rencana Kembali</div><div class="val">${formatDate(loan.endDate, 'dd MMMM yyyy')}</div></div>
+        <div class="info-row"><div class="label">Waktu Pengambilan</div><div class="val">${loan.checkInTime ? formatDate(loan.checkInTime, 'dd MMMM yyyy, HH:mm:ss') : 'Belum diambil'}</div></div>
+        <div class="info-row"><div class="label">Waktu Pengembalian</div><div class="val">${loan.checkOutTime ? formatDate(loan.checkOutTime, 'dd MMMM yyyy, HH:mm:ss') : 'Belum dikembalikan'}</div></div>
       </div>
     </div>
 
@@ -235,13 +270,18 @@ export async function GET(request: Request, { params }: { params: { id: string }
         </tr>
       </thead>
       <tbody>
+        ${loansToRender
+          .map(
+            (item, idx) => `
         <tr>
-          <td style="text-align:center;">1</td>
-          <td><strong>${loan.asset?.name}</strong></td>
-          <td><span style="font-family:monospace; background:#e2e8f0; padding:2px 6px; border-radius:4px;">${loan.asset?.code}</span></td>
-          <td style="text-align:center;">${loan.quantity} Unit</td>
-          <td>${loan.purpose}</td>
-        </tr>
+          <td style="text-align:center;">${idx + 1}</td>
+          <td><strong>${item.asset?.name || '-'}</strong></td>
+          <td><span style="font-family:monospace; background:#e2e8f0; padding:2px 6px; border-radius:4px;">${item.asset?.code || '-'}</span></td>
+          <td style="text-align:center;">${item.quantity || 1} Unit</td>
+          <td>${item.purpose}</td>
+        </tr>`
+          )
+          .join('')}
       </tbody>
     </table>
 

@@ -26,8 +26,8 @@ export default function ClaimsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [bankAccounts, setBankAccounts] = useState<any[]>([]);
 
-  // Navigation Tab status (Siklus Hidup Klaim: NEW, INVESTIGATING, AWAITING_PAYMENT, RESOLVED)
-  const [activeStatusTab, setActiveStatusTab] = useState<'NEW' | 'INVESTIGATING' | 'AWAITING_PAYMENT' | 'RESOLVED'>('NEW');
+  // Navigation Tab status (Siklus Hidup Klaim)
+  const [activeStatusTab, setActiveStatusTab] = useState<'NEW' | 'INVESTIGATING' | 'AWAITING_PAYMENT' | 'PENDING_APPROVAL' | 'REJECTED' | 'RESOLVED'>('NEW');
 
   // Modal & Form State for User Submit Proof
   const [selectedClaim, setSelectedClaim] = useState<any>(null);
@@ -289,7 +289,8 @@ export default function ClaimsPage() {
           sourceFunding,
           adminNotes,
           diajukanAsuransi,
-          statusAsuransi
+          statusAsuransi,
+          deactivateAsset,
         }),
       });
 
@@ -409,6 +410,8 @@ export default function ClaimsPage() {
           { key: 'NEW', label: '🆕 Klaim Baru' },
           { key: 'INVESTIGATING', label: '🔍 Investigasi' },
           { key: 'AWAITING_PAYMENT', label: '💰 Menunggu Bayar' },
+          { key: 'PENDING_APPROVAL', label: '⏳ Menunggu Verifikasi' },
+          { key: 'REJECTED', label: '❌ Ditolak' },
           { key: 'RESOLVED', label: '✅ Selesai (Lunas)' },
         ].map(tab => (
           <button

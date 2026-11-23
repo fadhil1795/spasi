@@ -121,6 +121,13 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Data peminjaman tidak ditemukan' }, { status: 404 });
     }
 
+    if (!['ACTIVE', 'RETURN_REQUESTED', 'UNDER_INSPECTION'].includes(loan.status)) {
+      return NextResponse.json(
+        { error: `Peminjaman berstatus "${loan.status}" tidak dapat diinspeksi ulang.` },
+        { status: 400 }
+      );
+    }
+
     // 1. Calculate Aggregate Item Summary
     let totalBaik = 0;
     let totalRusakRingan = 0;
@@ -158,7 +165,9 @@ export async function POST(request: Request) {
 
     // 3. Compute Penalty Fee for Late Return
     const now = new Date();
-    const penaltyFee = calculatePenaltyFee(loan.endDate, now, 50000);
+    const setting = await prisma.systemSetting.findUnique({ where: { id: 'default' } });
+    const penaltyRate = setting?.dailyPenaltyRate || 50000;
+    const penaltyFee = calculatePenaltyFee(loan.endDate, now, penaltyRate);
 
     // 4. Save Inspection in Database
     const inspection = await prisma.returnInspection.upsert({
@@ -334,11 +343,18 @@ export async function POST(request: Request) {
       });
     }
 
-    // 6. Update Asset Record Status & Condition
+    // 6. Update Asset Record Status, availableQty & Condition
+    const loanQty = loan.quantity || 1;
+    const isLostAsset = resultingAssetStatus === 'LOST' || totalHilang > 0;
+    const restoredAvailQty = isLostAsset
+      ? loan.asset.availableQty
+      : Math.min(loan.asset.quantity, loan.asset.availableQty + loanQty);
+
     await prisma.asset.update({
       where: { id: loan.assetId },
       data: {
-        status: resultingAssetStatus,
+        availableQty: restoredAvailQty,
+        status: resultingAssetStatus === 'AVAILABLE' && restoredAvailQty === 0 ? 'BORROWED' : resultingAssetStatus,
         condition: assetConditionSummary,
       },
     });

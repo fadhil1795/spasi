@@ -48,7 +48,9 @@ export default function RoomBookingScanPage() {
   }, [scannerReady]);
 
   const handleLookupBooking = async (bookingNumber: string) => {
-    const code = bookingNumber.trim().toUpperCase();
+    const raw = bookingNumber.trim().replace(/^#/, '');
+    const urlMatch = raw.match(/\/bookings\/([A-Za-z0-9_-]+)/i);
+    const code = (urlMatch ? urlMatch[1] : raw).toUpperCase();
     if (!code) return;
     try {
       setSearching(true);
@@ -192,7 +194,7 @@ export default function RoomBookingScanPage() {
                 <CheckCircle size={18} /> Mulai Proses Check-In
               </Button>
             )}
-            {booking.bookingStatus === 'ACTIVE' && (
+            {['ACTIVE', 'RETURN_REQUESTED'].includes(booking.bookingStatus) && (
               <Button
                 variant="primary"
                 style={{ flex: 1, background: 'var(--color-success)' }}

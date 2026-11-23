@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import { useToast } from '@/components/ui/Toast';
 import { Modal } from '@/components/ui/Modal';
 import { formatCurrency, formatDate } from '@/lib/utils';
+import { getRoomTypeLabel, getRoomTypeColor, parseFacilities } from '@/lib/roomConstants';
 import {
   ArrowLeft,
   Edit,
@@ -26,6 +27,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Printer,
+  QrCode,
+  UserCheck,
 } from 'lucide-react';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -34,11 +37,15 @@ interface RoomDetail {
   id: string;
   code: string | null;
   name: string;
+  roomType?: string | null;
   building: string;
   floor: string | null;
+  room?: string | null;
   areaName: string | null;
   area: number | null;
   capacity: number | null;
+  picName?: string | null;
+  picPhone?: string | null;
   description: string | null;
   pricePerHour: number | null;
   pricePerDay: number | null;
@@ -47,11 +54,13 @@ interface RoomDetail {
   isRentable?: boolean;
   isLoanable?: boolean;
   requiresDepositForInternal?: boolean;
-  facilities: string[];
+  facilities: string[] | any;
   photos: string[];
   status: string;
   assets?: AssetRow[];
+  assetAllocations?: any[];
   bookings?: BookingRow[];
+  roomBookings?: any[];
 }
 
 interface AssetRow {
@@ -227,6 +236,18 @@ export default function RoomDetailPage() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
             <h1 style={{ fontSize: '1.8rem', fontWeight: 800 }}>{room.name}</h1>
+            <span
+              style={{
+                fontSize: '0.75rem',
+                fontWeight: 700,
+                padding: '0.2rem 0.55rem',
+                borderRadius: '4px',
+                color: getRoomTypeColor(room.roomType),
+                background: `${getRoomTypeColor(room.roomType)}18`,
+              }}
+            >
+              {getRoomTypeLabel(room.roomType)}
+            </span>
             {room.code && (
               <span
                 style={{
@@ -249,19 +270,36 @@ export default function RoomDetailPage() {
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '0.4rem',
+              gap: '1rem',
+              flexWrap: 'wrap',
               fontSize: '0.85rem',
               color: 'var(--color-muted)',
             }}
           >
-            <Building2 size={13} />
-            {room.building}
-            {room.floor ? `, Lantai ${room.floor}` : ''}
-            {room.areaName ? ` — ${room.areaName}` : ''}
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+              <Building2 size={13} />
+              {room.building}
+              {room.floor ? `, Lantai ${room.floor}` : ''}
+              {room.room ? ` (${room.room})` : (room.areaName ? ` — ${room.areaName}` : '')}
+            </span>
+            {room.picName && (
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                <UserCheck size={13} style={{ color: 'var(--color-primary-light)' }} />
+                PIC: <strong style={{ color: 'var(--color-text)' }}>{room.picName}</strong>
+                {room.picPhone && ` (${room.picPhone})`}
+              </span>
+            )}
           </div>
         </div>
 
         <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <Link
+            href={`/dashboard/rooms/${room.id}/qr`}
+            className="btn btn-secondary"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
+          >
+            <QrCode size={16} /> Cetak QR Pintu
+          </Link>
           <Link
             href={`/dashboard/rooms/${room.id}/kir`}
             className="btn btn-secondary"
@@ -283,6 +321,76 @@ export default function RoomDetailPage() {
           </Button>
         </div>
       </div>
+
+      {/* Pengelolaan Ruangan yang Sedang Disewa / Siap Check-In */}
+      {(() => {
+        const activeOrConfirmed = (room.roomBookings || []).filter((b: any) =>
+          ['ACTIVE', 'RETURN_REQUESTED', 'CONFIRMED'].includes(b.bookingStatus)
+        );
+        if (activeOrConfirmed.length === 0) return null;
+
+        return (
+          <Card
+            style={{
+              padding: '1.15rem 1.35rem',
+              border: '1px solid var(--color-primary-light)',
+              background: 'rgba(124, 58, 237, 0.08)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.75rem',
+            }}
+          >
+            <div style={{ fontWeight: 800, fontSize: '0.98rem', color: 'var(--color-text)' }}>
+              🔑 Pengelolaan Penggunaan Ruangan Aktif ({activeOrConfirmed.length})
+            </div>
+            {activeOrConfirmed.map((b: any) => (
+              <div
+                key={b.id}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: '0.75rem',
+                  padding: '0.75rem 1rem',
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--color-surface)',
+                  border: '1px solid var(--color-border)',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                    <span style={{ fontFamily: 'monospace', fontWeight: 800, color: 'var(--color-primary-light)' }}>
+                      {b.bookingNumber}
+                    </span>
+                    <strong>{b.renter?.name || '-'}</strong>
+                    <Badge status={b.bookingStatus} />
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--color-muted)', marginTop: '0.2rem' }}>
+                    Jadwal: {formatDate(b.startTime, 'dd MMM yyyy HH:mm')} s.d. {formatDate(b.endTime, 'dd MMM yyyy HH:mm')}
+                    {b.addonAssets?.length > 0 && ` • +${b.addonAssets.length} Peralatan`}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  {b.bookingStatus === 'CONFIRMED' && (
+                    <Link href={`/dashboard/room-bookings/${b.id}/checkin`} className="btn btn-secondary btn-sm">
+                      Serah Terima Masuk (Check-In)
+                    </Link>
+                  )}
+                  {['ACTIVE', 'RETURN_REQUESTED'].includes(b.bookingStatus) && (
+                    <Link href={`/dashboard/room-bookings/${b.id}/checkout`} className="btn btn-primary btn-sm">
+                      Serah Terima Keluar (Check-Out)
+                    </Link>
+                  )}
+                  <Link href={`/dashboard/room-bookings/${b.id}`} className="btn btn-ghost btn-sm">
+                    Detail Booking
+                  </Link>
+                </div>
+              </div>
+            ))}
+          </Card>
+        );
+      })()}
 
       {/* Tab Nav */}
       <div
@@ -375,7 +483,7 @@ function TabInfo({
   };
 
   const photos = parseArr(room.photos);
-  const facilities = parseArr(room.facilities);
+  const facilities = parseFacilities(room.facilities);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -485,7 +593,7 @@ function TabInfo({
             <InfoRow icon={<Building2 size={15} />} label="Lokasi">
               {room.building}
               {room.floor ? `, Lantai ${room.floor}` : ''}
-              {room.areaName ? ` — ${room.areaName}` : ''}
+              {room.room ? ` — ${room.room}` : room.areaName ? ` — ${room.areaName}` : ''}
             </InfoRow>
             {room.area != null && (
               <InfoRow icon={<Package size={15} />} label="Luas">
@@ -575,23 +683,28 @@ function TabInfo({
             Fasilitas
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-            {facilities.map((fac: string) => (
+            {facilities.map((fac, i) => (
               <span
-                key={fac}
+                key={`${fac.name}-${i}`}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: '0.3rem',
-                  padding: '0.3rem 0.75rem',
+                  gap: '0.35rem',
+                  padding: '0.32rem 0.8rem',
                   borderRadius: 'var(--radius-pill)',
                   background: 'var(--color-success-bg)',
                   color: 'var(--color-success)',
                   border: '1px solid rgba(16, 185, 129, 0.3)',
-                  fontSize: '0.8rem',
+                  fontSize: '0.82rem',
                   fontWeight: 600,
                 }}
               >
-                <CheckCircle2 size={12} /> {fac}
+                <CheckCircle2 size={12} /> {fac.name}
+                {fac.qty > 1 && (
+                  <span style={{ background: 'rgba(16, 185, 129, 0.25)', padding: '0.05rem 0.35rem', borderRadius: '4px', fontSize: '0.74rem', fontWeight: 800 }}>
+                    {fac.qty}
+                  </span>
+                )}
               </span>
             ))}
           </div>
@@ -655,16 +768,35 @@ function InfoRow({
 // ── Tab: INVENTARIS ───────────────────────────────────────────────────────────
 
 function TabInventaris({ room }: { room: RoomDetail }) {
-  const assets = room.assets ?? [];
+  // Gabungkan aset yang tertaut langsung (assets) dan aset alokasi jumlah (assetAllocations)
+  const combinedMap = new Map<string, any>();
+
+  (room.assets ?? []).forEach((a: any) => {
+    combinedMap.set(a.id, { ...a, roomQty: a.quantity || 1 });
+  });
+
+  (room.assetAllocations ?? []).forEach((al: any) => {
+    if (al.asset) {
+      combinedMap.set(al.asset.id, { ...al.asset, roomQty: al.quantity || 1 });
+    }
+  });
+
+  const assets = Array.from(combinedMap.values());
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+        <Link
+          href={`/dashboard/rooms/${room.id}/edit`}
+          className="btn btn-secondary btn-sm"
+        >
+          <Edit size={15} /> Atur Jumlah &amp; Aset Ruangan
+        </Link>
         <Link
           href={`/dashboard/assets/new?roomId=${room.id}`}
           className="btn btn-primary btn-sm"
         >
-          <Package size={15} /> + Assign Aset ke Ruangan
+          <Package size={15} /> + Tambah Aset Baru ke Ruangan
         </Link>
       </div>
 
@@ -689,6 +821,7 @@ function TabInventaris({ room }: { room: RoomDetail }) {
                 <th style={{ padding: '1rem 1.25rem' }}>Kode</th>
                 <th style={{ padding: '1rem' }}>Nama Aset</th>
                 <th style={{ padding: '1rem' }}>Kategori</th>
+                <th style={{ padding: '1rem', textAlign: 'center' }}>Jumlah di Ruangan</th>
                 <th style={{ padding: '1rem' }}>Kondisi</th>
                 <th style={{ padding: '1rem' }}>Status</th>
               </tr>
@@ -714,6 +847,9 @@ function TabInventaris({ room }: { room: RoomDetail }) {
                     <td style={{ padding: '1rem', color: 'var(--color-muted)' }}>
                       {a.category?.name ?? '-'}
                     </td>
+                    <td style={{ padding: '1rem', textAlign: 'center', fontWeight: 800, color: 'var(--color-primary-light)' }}>
+                      {a.roomQty} Unit
+                    </td>
                     <td style={{ padding: '1rem' }}>
                       <Badge status={a.condition} />
                     </td>
@@ -725,7 +861,7 @@ function TabInventaris({ room }: { room: RoomDetail }) {
               ) : (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={6}
                     style={{
                       padding: '3rem',
                       textAlign: 'center',
@@ -828,7 +964,7 @@ function TabKetersediaan({
 // ── Tab: RIWAYAT SEWA ─────────────────────────────────────────────────────────
 
 function TabRiwayat({ room }: { room: RoomDetail }) {
-  const bookings = room.bookings ?? [];
+  const bookings = room.roomBookings ?? room.bookings ?? [];
 
   return (
     <Card style={{ padding: 0, overflow: 'hidden' }}>
@@ -854,46 +990,68 @@ function TabRiwayat({ room }: { room: RoomDetail }) {
               <th style={{ padding: '1rem' }}>Waktu</th>
               <th style={{ padding: '1rem' }}>Total</th>
               <th style={{ padding: '1rem' }}>Status</th>
+              <th style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>Aksi</th>
             </tr>
           </thead>
           <tbody>
             {bookings.length > 0 ? (
-              bookings.map((b) => (
-                <tr key={b.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                  <td
-                    style={{
-                      padding: '1rem 1.25rem',
-                      fontFamily: 'monospace',
-                      fontWeight: 700,
-                      color: 'var(--color-primary-light)',
-                    }}
-                  >
-                    {b.bookingNumber}
-                  </td>
-                  <td style={{ padding: '1rem', fontWeight: 600 }}>{b.renterName}</td>
-                  <td style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--color-muted)' }}>
-                    {formatDate(b.startTime, 'dd MMM yyyy HH:mm')}
-                    <br />
-                    s/d {formatDate(b.endTime, 'dd MMM yyyy HH:mm')}
-                  </td>
-                  <td
-                    style={{
-                      padding: '1rem',
-                      fontWeight: 700,
-                      color: 'var(--color-success)',
-                    }}
-                  >
-                    {b.totalAmount != null ? formatCurrency(b.totalAmount) : '-'}
-                  </td>
-                  <td style={{ padding: '1rem' }}>
-                    <Badge status={b.status} />
-                  </td>
-                </tr>
-              ))
+              bookings.map((b: any) => {
+                const status = b.bookingStatus || b.status;
+                const renterName = b.renter?.name || b.renterName || '-';
+                return (
+                  <tr key={b.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <td
+                      style={{
+                        padding: '1rem 1.25rem',
+                        fontFamily: 'monospace',
+                        fontWeight: 700,
+                        color: 'var(--color-primary-light)',
+                      }}
+                    >
+                      {b.bookingNumber}
+                    </td>
+                    <td style={{ padding: '1rem', fontWeight: 600 }}>{renterName}</td>
+                    <td style={{ padding: '1rem', fontSize: '0.85rem', color: 'var(--color-muted)' }}>
+                      {formatDate(b.startTime, 'dd MMM yyyy HH:mm')}
+                      <br />
+                      s/d {formatDate(b.endTime, 'dd MMM yyyy HH:mm')}
+                    </td>
+                    <td
+                      style={{
+                        padding: '1rem',
+                        fontWeight: 700,
+                        color: 'var(--color-success)',
+                      }}
+                    >
+                      {b.totalAmount != null ? formatCurrency(b.totalAmount) : '-'}
+                    </td>
+                    <td style={{ padding: '1rem' }}>
+                      <Badge status={status} />
+                    </td>
+                    <td style={{ padding: '1rem 1.25rem', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                        {status === 'CONFIRMED' && (
+                          <Link href={`/dashboard/room-bookings/${b.id}/checkin`} className="btn btn-secondary btn-sm">
+                            Check-In
+                          </Link>
+                        )}
+                        {['ACTIVE', 'RETURN_REQUESTED'].includes(status) && (
+                          <Link href={`/dashboard/room-bookings/${b.id}/checkout`} className="btn btn-primary btn-sm">
+                            Check-Out
+                          </Link>
+                        )}
+                        <Link href={`/dashboard/room-bookings/${b.id}`} className="btn btn-ghost btn-sm">
+                          Detail
+                        </Link>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             ) : (
               <tr>
                 <td
-                  colSpan={5}
+                  colSpan={6}
                   style={{
                     padding: '3rem',
                     textAlign: 'center',

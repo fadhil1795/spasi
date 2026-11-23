@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthSession } from '@/lib/auth';
 import bcrypt from 'bcryptjs';
+import { recordAuditLog } from '@/lib/audit';
 
 export const dynamic = 'force-dynamic';
 
@@ -59,15 +60,22 @@ export async function GET(request: Request) {
         renterCategory: true,
         phone: true,
         identityNo: true,
+        departmentId: true,
+        address: true,
+        gender: true,
+        birthDate: true,
+        birthPlace: true,
+        residence: true,
+        avatarUrl: true,
         isSuspended: true,
         createdAt: true,
+        updatedAt: true,
         department: {
           select: { id: true, name: true, code: true }
         },
         _count: {
           select: {
             loans: true,
-            roomBookings: true,
             violations: true,
           }
         }
@@ -94,7 +102,7 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
-    const { name, email, password, role, renterCategory, phone, identityNo, departmentId } = body;
+    const { name, email, password, role, renterCategory, phone, identityNo, departmentId, address, gender } = body;
 
     if (!name || !email || !password) {
       return NextResponse.json({ error: 'Nama, Email, dan Password wajib diisi' }, { status: 400 });
@@ -118,6 +126,8 @@ export async function POST(request: Request) {
         phone: phone || null,
         identityNo: identityNo || null,
         departmentId: departmentId || null,
+        address: address || null,
+        gender: gender || null,
         isSuspended: false,
       },
       select: {
@@ -128,8 +138,21 @@ export async function POST(request: Request) {
         renterCategory: true,
         phone: true,
         identityNo: true,
+        departmentId: true,
+        address: true,
+        gender: true,
         isSuspended: true,
       }
+    });
+
+    await recordAuditLog({
+      userId: (session.user as any).id,
+      action: 'CREATE',
+      entity: 'User',
+      entityId: newUser.id,
+      details: `Mendaftarkan akun user baru: ${newUser.name} (${newUser.email}) dengan role ${newUser.role}`,
+      oldData: null,
+      newData: newUser,
     });
 
     return NextResponse.json({ message: 'User berhasil dibuat', user: newUser }, { status: 201 });

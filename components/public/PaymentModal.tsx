@@ -97,6 +97,10 @@ export function PaymentModal({
   };
 
   const handleConfirmPayment = async () => {
+    if (method !== 'Cash' && !proofUrl) {
+      showToast('Harap unggah bukti transfer/pembayaran terlebih dahulu.', 'error');
+      return;
+    }
     try {
       setSubmitting(true);
       const url = isAsset ? `/api/rentals/${bookingId}` : `/api/room-bookings/${bookingId}`;
@@ -108,12 +112,17 @@ export function PaymentModal({
             notes: proofUrl ? `Bukti Bayar Sewa Aset Terlampir: ${proofUrl}` : `Pembayaran Sewa Aset via ${method} (Menunggu Verifikasi Admin)`,
           }
         : {
-            payStatus: isPelunasan ? 'PENDING_VERIFICATION' : (isDP ? 'DOWN_PAYMENT' : 'PENDING_VERIFICATION'),
+            payStatus: 'PENDING_VERIFICATION',
             payMethod: method,
+            ...(!isPelunasan && { paymentScheme: isDP ? 'DOWN_PAYMENT' : 'FULL' }),
             paymentProofUrl: proofUrl || null,
             notes: isPelunasan
               ? `[PELUNASAN SISA 50%] Bukti Transfer Terlampir: ${proofUrl || '-'}`
-              : (proofUrl ? `Bukti Bayar Terlampir: ${proofUrl}` : `Pembayaran via ${method} (Menunggu Verifikasi Admin)`),
+              : isDP
+              ? `[DP 50%] Bukti Bayar Terlampir: ${proofUrl || '-'}`
+              : proofUrl
+              ? `[LUNAS] Bukti Bayar Terlampir: ${proofUrl}`
+              : `Pembayaran via ${method} (Menunggu Verifikasi Admin)`,
           };
 
       const res = await fetch(url, {

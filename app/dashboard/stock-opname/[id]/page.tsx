@@ -348,13 +348,18 @@ export default function StockOpnameDetailPage() {
                             {asset?.name || 'Aset'}
                           </Link>
                         </div>
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.2rem' }}>
-                          <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--color-primary-light)' }}>
+                        <div style={{ display: 'flex', gap: '0.4rem', alignItems: 'center', marginTop: '0.25rem', flexWrap: 'wrap' }}>
+                          <span style={{ fontFamily: 'monospace', fontSize: '0.78rem', color: 'var(--color-primary-light)', background: 'rgba(59, 130, 246, 0.1)', padding: '0.1rem 0.35rem', borderRadius: '3px' }}>
                             {asset?.code}
                           </span>
+                          {asset?.category?.name && (
+                            <span style={{ fontSize: '0.72rem', background: 'var(--color-surface2)', border: '1px solid var(--color-border)', padding: '0.1rem 0.4rem', borderRadius: '4px', color: 'var(--color-muted)' }}>
+                              {asset.category.parent?.name ? `${asset.category.parent.name} › ` : ''}{asset.category.name}
+                            </span>
+                          )}
                           {asset?.brand && (
-                            <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>
-                              • {asset.brand}
+                            <span style={{ fontSize: '0.72rem', background: 'rgba(168, 85, 247, 0.12)', border: '1px solid rgba(168, 85, 247, 0.25)', color: '#a855f7', padding: '0.1rem 0.4rem', borderRadius: '4px', fontWeight: 600 }}>
+                              {asset.brand}
                             </span>
                           )}
                           {asset?.serialNumber && (

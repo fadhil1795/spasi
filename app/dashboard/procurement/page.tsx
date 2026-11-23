@@ -9,7 +9,7 @@ import { useToast } from '@/components/ui/Toast';
 import { formatCurrency, formatDate } from '@/lib/utils';
 import {
   ShoppingBag, Plus, CheckCircle2, Clock, XCircle,
-  Truck, Building2, User, ChevronRight, FileText, Check, Trash2, Box, Eye
+  Truck, Building2, User, ChevronRight, FileText, Check, Trash2, Box, Eye, Printer
 } from 'lucide-react';
 
 export default function ProcurementDashboardPage() {
@@ -420,22 +420,40 @@ export default function ProcurementDashboardPage() {
                           )}
 
                           {req.status === 'APPROVED_SARPRAS' && (
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              onClick={() => {
-                                setSelectedRequest(req);
-                                setReceiveModalOpen(true);
-                              }}
-                            >
-                              <Truck size={14} /> Terima & Registrasi Aset
-                            </Button>
+                            <>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => {
+                                  setSelectedRequest(req);
+                                  setReceiveModalOpen(true);
+                                }}
+                              >
+                                <Truck size={14} /> Terima & Registrasi Aset
+                              </Button>
+                              <Link
+                                href={`/dashboard/procurement/${req.id}/bast`}
+                                className="btn btn-secondary btn-sm"
+                                title="Draft BAST Penerimaan Barang"
+                              >
+                                <Printer size={14} /> BAST
+                              </Link>
+                            </>
                           )}
 
                           {req.status === 'RECEIVED' && (
-                            <Link href="/dashboard/assets" className="btn btn-secondary btn-sm">
-                              Lihat di Katalog Aset
-                            </Link>
+                            <>
+                              <Link
+                                href={`/dashboard/procurement/${req.id}/bast`}
+                                className="btn btn-primary btn-sm"
+                                title="Cetak Berita Acara Serah Terima Pengadaan"
+                              >
+                                <Printer size={14} /> Cetak BAST
+                              </Link>
+                              <Link href="/dashboard/assets" className="btn btn-secondary btn-sm">
+                                Lihat di Katalog Aset
+                              </Link>
+                            </>
                           )}
                         </div>
                       </td>
@@ -857,7 +875,14 @@ export default function ProcurementDashboardPage() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '0.5rem' }}>
+              <Link
+                href={`/dashboard/procurement/${viewingRequest.id}/bast`}
+                className="btn btn-primary"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.85rem' }}
+              >
+                <Printer size={15} /> Cetak BAST Pengadaan
+              </Link>
               <Button variant="secondary" onClick={() => setDetailModalOpen(false)}>
                 Tutup
               </Button>

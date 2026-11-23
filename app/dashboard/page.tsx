@@ -199,6 +199,126 @@ export default function DashboardPage() {
           </div>
         </div>
 
+        {/* Status Akun & Peringatan Peminjaman */}
+        {!loading && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+            <Card style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                <div
+                  style={{
+                    width: '40px',
+                    height: '40px',
+                    borderRadius: 'var(--radius-md)',
+                    background:
+                      data?.userProfile?.verificationStatus === 'VERIFIED'
+                        ? 'rgba(16, 185, 129, 0.12)'
+                        : 'rgba(245, 158, 11, 0.12)',
+                    color:
+                      data?.userProfile?.verificationStatus === 'VERIFIED'
+                        ? 'var(--color-success)'
+                        : 'var(--color-warning)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  <ShieldCheck size={20} />
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--color-muted)', fontWeight: 600 }}>Status Verifikasi Akun</div>
+                  <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>
+                    {data?.userProfile?.verificationStatus === 'VERIFIED'
+                      ? 'Terverifikasi'
+                      : data?.userProfile?.verificationStatus === 'PENDING'
+                      ? 'Menunggu Review Admin'
+                      : 'Belum Terverifikasi'}
+                    {' '}•{' '}
+                    <span style={{ color: 'var(--color-primary-light)' }}>
+                      {data?.userProfile?.renterCategory === 'INTERNAL' ? 'Internal' : 'Eksternal'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <Link href="/dashboard/verification" className="btn btn-sm btn-secondary">
+                {data?.userProfile?.verificationStatus === 'VERIFIED' ? 'Detail' : 'Verifikasi'}
+              </Link>
+            </Card>
+
+            {(userStats.userOverdueCount > 0 || userStats.userUnpaidFinesTotal > 0) ? (
+              <Card
+                style={{
+                  padding: '1rem 1.25rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: '1rem',
+                  borderColor: 'rgba(239, 68, 68, 0.35)',
+                  background: 'rgba(239, 68, 68, 0.04)',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                  <div
+                    style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'rgba(239, 68, 68, 0.14)',
+                      color: 'var(--color-danger)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <AlertTriangle size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--color-danger)', fontWeight: 700 }}>
+                      Perlu Tindakan Segera
+                    </div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>
+                      {userStats.userOverdueCount > 0 ? `${userStats.userOverdueCount} peminjaman jatuh tempo` : ''}
+                      {userStats.userOverdueCount > 0 && userStats.userUnpaidFinesTotal > 0 ? ' • ' : ''}
+                      {userStats.userUnpaidFinesTotal > 0 ? `Denda belum lunas ${formatCurrency(userStats.userUnpaidFinesTotal)}` : ''}
+                    </div>
+                  </div>
+                </div>
+                <Link href="/dashboard/loans?mode=my" className="btn btn-sm btn-primary">
+                  Cek Peminjaman
+                </Link>
+              </Card>
+            ) : (
+              <Card style={{ padding: '1rem 1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                  <div
+                    style={{
+                      width: '40px',
+                      height: '40px',
+                      borderRadius: 'var(--radius-md)',
+                      background: 'rgba(16, 185, 129, 0.12)',
+                      color: 'var(--color-success)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <CheckCircle2 size={20} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.78rem', color: 'var(--color-muted)', fontWeight: 600 }}>Kepatuhan Pengembalian</div>
+                    <div style={{ fontWeight: 700, fontSize: '0.92rem' }}>Tidak ada tunggakan atau denda aktif</div>
+                  </div>
+                </div>
+                <Link href="/dashboard/loans?mode=my" className="btn btn-sm btn-secondary">
+                  Riwayat
+                </Link>
+              </Card>
+            )}
+          </div>
+        )}
+
         {/* User Metric Cards */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
           {[
@@ -249,7 +369,7 @@ export default function DashboardPage() {
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <CalendarCheck size={18} style={{ color: 'var(--color-primary)' }} /> Peminjaman Saya Terbaru
               </h3>
-              <Link href="/dashboard/loans" style={{ fontSize: '0.82rem', color: 'var(--color-primary-light)', fontWeight: 600 }}>
+              <Link href="/dashboard/loans?mode=my" style={{ fontSize: '0.82rem', color: 'var(--color-primary-light)', fontWeight: 600 }}>
                 Lihat Semua →
               </Link>
             </div>
@@ -293,7 +413,7 @@ export default function DashboardPage() {
               <h3 style={{ fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                 <Building2 size={18} style={{ color: 'var(--color-accent)' }} /> Booking Ruangan Saya
               </h3>
-              <Link href="/dashboard/room-bookings" style={{ fontSize: '0.82rem', color: 'var(--color-primary-light)', fontWeight: 600 }}>
+              <Link href="/dashboard/room-bookings?mode=my" style={{ fontSize: '0.82rem', color: 'var(--color-primary-light)', fontWeight: 600 }}>
                 Lihat Semua →
               </Link>
             </div>
@@ -492,14 +612,25 @@ export default function DashboardPage() {
   // ═════════════════════════════════════════════════════════════════
   const stats = data?.stats || {
     totalAssets: 0,
+    totalPhysicalUnits: 0,
+    totalAssetAcquisitionValue: 0,
+    totalAssetBookValue: 0,
     borrowedCount: 0,
     rentedCount: 0,
     maintenanceCount: 0,
+    damagedCount: 0,
+    disposedCount: 0,
     availableCount: 0,
     totalRooms: 0,
     totalRoomBookings: 0,
     activeRoomBookings: 0,
+    problematicCount: 0,
   };
+
+  const conditionDist: any[] = data?.conditionDistribution || [];
+  const deptDist: any[] = data?.departmentDistribution || [];
+  const newestAssets: any[] = data?.newestAssets || [];
+  const problematicAssets: any[] = data?.problematicAssets || [];
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -546,43 +677,309 @@ export default function DashboardPage() {
       {/* Primary KPI Cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
         {[
-          { title: 'Total Aset Terdaftar', value: stats.totalAssets, icon: Box, color: 'var(--color-primary)' },
-          { title: 'Aset Sedang Disewa/Pinjam', value: stats.borrowedCount + stats.rentedCount, icon: CalendarCheck, color: 'var(--color-warning)' },
-          { title: 'Booking Ruangan Aktif', value: stats.activeRoomBookings, icon: Clock, color: 'var(--color-success)' },
-          { title: 'Saldo Kas Akhir', value: formatCurrency(stats.totalCashBalance || 0), icon: FileText, color: 'var(--color-accent)' },
+          {
+            title: 'Total Seluruh Aset',
+            value: `${stats.totalAssets} Jenis`,
+            sub: `${stats.totalPhysicalUnits || stats.totalAssets} Total Unit Fisik`,
+            icon: Box,
+            color: 'var(--color-primary)',
+          },
+          {
+            title: 'Total Nilai Perolehan Aset',
+            value: formatCurrency(stats.totalAssetAcquisitionValue || 0),
+            sub: `Nilai Buku: ${formatCurrency(stats.totalAssetBookValue || 0)}`,
+            icon: Receipt,
+            color: '#10b981',
+          },
+          {
+            title: 'Aset Sedang Disewa / Pinjam',
+            value: stats.borrowedCount + stats.rentedCount,
+            sub: `${stats.availableCount} Aset Tersedia Siap Pakai`,
+            icon: CalendarCheck,
+            color: 'var(--color-warning)',
+          },
+          {
+            title: 'Aset Bermasalah / Maintenance',
+            value: (stats.maintenanceCount || 0) + (stats.damagedCount || 0),
+            sub: `${stats.maintenanceCount || 0} Servis • ${stats.damagedCount || 0} Rusak`,
+            icon: Wrench,
+            color: 'var(--color-danger)',
+          },
+          {
+            title: 'Booking Ruangan Aktif',
+            value: stats.activeRoomBookings,
+            sub: `Dari ${stats.totalRooms || 0} Ruangan Terdaftar`,
+            icon: Building2,
+            color: '#3b82f6',
+          },
+          {
+            title: 'Saldo Kas Akhir',
+            value: formatCurrency(stats.totalCashBalance || 0),
+            sub: 'Kas Operasional Sarpras',
+            icon: FileText,
+            color: 'var(--color-accent)',
+          },
         ].map((kpi, idx) => {
           const Icon = kpi.icon;
           return (
             <Card key={idx} style={{ padding: '1.25rem' }}>
               {loading ? (
-                <Skeleton height="50px" />
+                <Skeleton height="64px" />
               ) : (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <div>
-                    <span style={{ fontSize: '0.82rem', color: 'var(--color-muted)', fontWeight: 600, display: 'block', marginBottom: '0.35rem' }}>
+                <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.75rem' }}>
+                  <div style={{ minWidth: 0 }}>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--color-muted)', fontWeight: 600, display: 'block', marginBottom: '0.35rem' }}>
                       {kpi.title}
                     </span>
-                    <span style={{ fontSize: '1.8rem', fontWeight: 800, lineHeight: 1.1 }}>{kpi.value}</span>
+                    <span style={{ fontSize: '1.45rem', fontWeight: 800, lineHeight: 1.15, display: 'block', wordBreak: 'break-word' }}>
+                      {kpi.value}
+                    </span>
+                    {kpi.sub && (
+                      <span style={{ fontSize: '0.74rem', color: 'var(--color-muted)', display: 'block', marginTop: '0.35rem', fontWeight: 500 }}>
+                        {kpi.sub}
+                      </span>
+                    )}
                   </div>
                   <div
                     style={{
-                      width: '44px',
-                      height: '44px',
+                      width: '42px',
+                      height: '42px',
                       borderRadius: 'var(--radius-md)',
                       background: 'var(--color-surface2)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       color: kpi.color,
+                      flexShrink: 0,
                     }}
                   >
-                    <Icon size={22} />
+                    <Icon size={20} />
                   </div>
                 </div>
               )}
             </Card>
           );
         })}
+      </div>
+
+      {/* Distribusi Aset per Unit & Kondisi Fisik Aset */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.5rem' }}>
+        {/* Jumlah Aset Berdasarkan Kondisi */}
+        <Card style={{ padding: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.15rem' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <ShieldCheck size={18} style={{ color: '#10b981' }} /> Jumlah Aset Berdasarkan Kondisi Fisik
+            </h3>
+            <Link href="/dashboard/reports?tab=INVENTORY&sub=CONDITION" style={{ fontSize: '0.8rem', color: 'var(--color-primary-light)', fontWeight: 600 }}>
+              Laporan Kondisi →
+            </Link>
+          </div>
+          {loading ? (
+            <Skeleton height="150px" />
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.9rem' }}>
+              {conditionDist.map((item: any) => {
+                const total = Math.max(stats.totalAssets, 1);
+                const pct = Math.round((item.count / total) * 100);
+                const color =
+                  item.condition === 'Baik'
+                    ? '#10b981'
+                    : item.condition === 'Rusak Ringan'
+                    ? '#f59e0b'
+                    : '#ef4444';
+                return (
+                  <div key={item.condition} style={{ padding: '0.8rem 1rem', borderRadius: 'var(--radius-md)', background: 'var(--color-surface2)' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: color, display: 'inline-block' }} />
+                        <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Kondisi {item.condition}</span>
+                      </div>
+                      <div style={{ fontSize: '0.85rem', fontWeight: 800, color }}>
+                        {item.count} Aset ({item.totalQty} Unit) • {pct}%
+                      </div>
+                    </div>
+                    <div style={{ width: '100%', height: '7px', borderRadius: '999px', background: 'var(--color-border)', overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: '999px', transition: 'width 0.4s ease' }} />
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginTop: '0.25rem' }}>
+                {[
+                  { label: 'Tersedia', val: stats.availableCount, color: '#10b981' },
+                  { label: 'Dipinjam/Sewa', val: stats.borrowedCount + stats.rentedCount, color: '#3b82f6' },
+                  { label: 'Maintenance', val: stats.maintenanceCount, color: '#f59e0b' },
+                  { label: 'Dihapuskan', val: stats.disposedCount || 0, color: '#6b7280' },
+                ].map((st) => (
+                  <div key={st.label} style={{ textAlign: 'center', padding: '0.5rem', borderRadius: 'var(--radius-sm)', border: '1px solid var(--color-border)' }}>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--color-muted)', fontWeight: 600 }}>{st.label}</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: st.color }}>{st.val}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </Card>
+
+        {/* Jumlah Aset per Unit / Fakultas */}
+        <Card style={{ padding: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.15rem' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <Building2 size={18} style={{ color: 'var(--color-primary)' }} /> Jumlah &amp; Nilai Aset per Unit / Fakultas
+            </h3>
+            <Link href="/dashboard/reports?tab=INVENTORY&sub=UNIT" style={{ fontSize: '0.8rem', color: 'var(--color-primary-light)', fontWeight: 600 }}>
+              Detail Unit →
+            </Link>
+          </div>
+          {loading ? (
+            <Skeleton height="150px" />
+          ) : deptDist.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem', maxHeight: '260px', overflowY: 'auto' }}>
+              {deptDist.map((d: any) => (
+                <div
+                  key={d.id}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.75rem 1rem',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--color-surface2)',
+                    gap: '0.75rem',
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: '0.74rem', padding: '0.1rem 0.45rem', borderRadius: '4px', background: 'rgba(228,37,44,0.12)', color: 'var(--color-primary)', fontWeight: 800 }}>
+                        {d.code}
+                      </span>
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.name}</span>
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginTop: '0.2rem' }}>
+                      Nilai Aset: <strong>{formatCurrency(d.totalValue || 0)}</strong>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                    <div style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--color-primary)' }}>{d.count} Aset</div>
+                    <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)' }}>{d.totalQty} Unit Fisik</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-muted)', fontSize: '0.88rem' }}>
+              Belum ada data unit/fakultas.
+            </div>
+          )}
+        </Card>
+      </div>
+
+      {/* Aset Baru Ditambahkan & Aset Bermasalah */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.5rem' }}>
+        {/* Aset Baru */}
+        <Card style={{ padding: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.15rem' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <Plus size={18} style={{ color: '#10b981' }} /> Aset Baru Ditambahkan
+            </h3>
+            <Link href="/dashboard/assets" style={{ fontSize: '0.8rem', color: 'var(--color-primary-light)', fontWeight: 600 }}>
+              Semua Aset →
+            </Link>
+          </div>
+          {loading ? (
+            <Skeleton height="160px" />
+          ) : newestAssets.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+              {newestAssets.map((ast: any) => (
+                <Link
+                  key={ast.id}
+                  href={`/dashboard/assets/${ast.id}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.75rem 0.95rem',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--color-surface2)',
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    gap: '0.75rem',
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {ast.name}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginTop: '0.15rem' }}>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{ast.code}</span> • {ast.category?.name || '-'} • {formatDate(ast.createdAt)}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                    <Badge status={ast.status} />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-muted)', fontSize: '0.88rem' }}>
+              Belum ada aset baru.
+            </div>
+          )}
+        </Card>
+
+        {/* Aset Bermasalah */}
+        <Card style={{ padding: '1.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.15rem' }}>
+            <h3 style={{ fontSize: '1.05rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+              <AlertTriangle size={18} style={{ color: '#ef4444' }} /> Aset Bermasalah &amp; Perlu Perbaikan
+            </h3>
+            <Link href="/dashboard/maintenance" style={{ fontSize: '0.8rem', color: 'var(--color-primary-light)', fontWeight: 600 }}>
+              Menu Pemeliharaan →
+            </Link>
+          </div>
+          {loading ? (
+            <Skeleton height="160px" />
+          ) : problematicAssets.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
+              {problematicAssets.map((ast: any) => (
+                <Link
+                  key={ast.id}
+                  href={`/dashboard/assets/${ast.id}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '0.75rem 0.95rem',
+                    borderRadius: 'var(--radius-md)',
+                    background: 'rgba(239, 68, 68, 0.06)',
+                    border: '1px solid rgba(239, 68, 68, 0.2)',
+                    textDecoration: 'none',
+                    color: 'inherit',
+                    gap: '0.75rem',
+                  }}
+                >
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontWeight: 700, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {ast.name}
+                    </div>
+                    <div style={{ fontSize: '0.75rem', color: 'var(--color-muted)', marginTop: '0.15rem' }}>
+                      <span style={{ fontFamily: 'monospace', fontWeight: 600 }}>{ast.code}</span> • Kondisi: <strong style={{ color: '#ef4444' }}>{ast.condition || ' Bermasalah'}</strong> • {ast.location?.name || ast.location?.building || 'Gudang'}
+                    </div>
+                  </div>
+                  <div style={{ flexShrink: 0 }}>
+                    <Badge status={ast.status} />
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-success)', fontSize: '0.88rem', background: 'rgba(16, 185, 129, 0.06)', borderRadius: 'var(--radius-md)' }}>
+              <CheckCircle2 size={24} style={{ margin: '0 auto 0.4rem', display: 'block' }} />
+              Seluruh aset dalam kondisi baik &amp; tidak ada kendala aktif.
+            </div>
+          )}
+        </Card>
       </div>
 
       {/* Admin Monitoring Grid */}

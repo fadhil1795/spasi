@@ -64,6 +64,18 @@ export default function PremiumMaintenancePage() {
 
   useEffect(() => {
     fetchData();
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      const urlAssetId = sp.get('assetId');
+      const isNew = sp.get('new');
+      if (urlAssetId) {
+        setTargetType('ASSET');
+        setNewForm((p) => ({ ...p, assetId: urlAssetId }));
+        if (isNew === 'true') {
+          setNewModalOpen(true);
+        }
+      }
+    }
   }, []);
 
   const fetchData = async () => {
@@ -83,8 +95,8 @@ export default function PremiumMaintenancePage() {
         const asts = await resA.json();
         setAssets(asts);
         if (asts.length > 0) {
-          setNewForm(p => ({ ...p, assetId: asts[0].id }));
-          setSchedForm(p => ({ ...p, assetId: asts[0].id }));
+          setNewForm((p) => ({ ...p, assetId: p.assetId || asts[0].id }));
+          setSchedForm((p) => ({ ...p, assetId: p.assetId || asts[0].id }));
         }
       }
       if (resR.ok) {
@@ -593,7 +605,11 @@ export default function PremiumMaintenancePage() {
             <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-muted)' }}>Pilih Aset *</label>
               <select className="input-field" value={newForm.assetId} onChange={(e) => setNewForm({ ...newForm, assetId: e.target.value })} style={{ width: '100%' }}>
-                {assets.map(a => <option key={a.id} value={a.id}>{a.name} ({a.code}) — [{a.status}]</option>)}
+                {assets.map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.code}) {a.brand ? `[${a.brand}] ` : ''}{a.category ? `• ${a.category.name} ` : ''}— [{a.status}]
+                  </option>
+                ))}
               </select>
             </div>
           ) : (
@@ -686,7 +702,11 @@ export default function PremiumMaintenancePage() {
             <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-muted)' }}>Pilih Aset *</label>
               <select className="input-field" value={schedForm.assetId} onChange={(e) => setSchedForm({ ...schedForm, assetId: e.target.value })} style={{ width: '100%' }}>
-                {assets.map(a => <option key={a.id} value={a.id}>{a.name} ({a.code})</option>)}
+                {assets.map(a => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.code}) {a.brand ? `[${a.brand}] ` : ''}{a.category ? `• ${a.category.name}` : ''}
+                  </option>
+                ))}
               </select>
             </div>
           )}

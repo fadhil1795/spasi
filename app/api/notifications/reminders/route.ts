@@ -88,7 +88,9 @@ export async function POST() {
     for (const booking of bookingsToStart) {
       const timeStr = booking.startTime.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
       const title = 'Reminder H-1 Reservasi Ruangan 🏢';
-      const msg = `Halo ${booking.renter.name},\nBesok adalah jadwal sewa ruangan Anda di "${booking.location.name}" (${booking.location.building}) mulai pukul ${timeStr} WIB. Harap siapkan E-Voucher Anda untuk check-in.`;
+      const locName = booking.location?.name || 'Paket Peralatan Sarpras';
+      const locBuilding = booking.location?.building ? ` (${booking.location.building})` : '';
+      const msg = `Halo ${booking.renter.name},\nBesok adalah jadwal sewa Anda untuk "${locName}"${locBuilding} mulai pukul ${timeStr} WIB. Harap siapkan E-Voucher Anda untuk check-in.`;
 
       if (booking.renter.email) {
         await sendEmailNotification({

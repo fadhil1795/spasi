@@ -351,16 +351,17 @@ export function buildBookingTimeline(booking: any): TimelineStep[] {
   const s = booking?.bookingStatus || '';
   const p = booking?.payStatus || '';
 
-  const isRejected   = ['CANCELLED', 'REJECTED'].includes(s) || p === 'REJECTED';
+  const isCancelled  = ['CANCELLED', 'REJECTED'].includes(s);
+  const isCompleted  = ['COMPLETED', 'COMPLETED_WITH_CLAIM'].includes(s);
   const isFree       = ((booking?.totalAmount || 0) + (booking?.depositAmount || 0)) === 0;
 
-  const order = ['PENDING','APPROVED','CONFIRMED','ACTIVE','RETURN_REQUESTED','COMPLETED'];
-  const currentIdx   = order.indexOf(s);
-  const isDone       = (statuses: string[]) => statuses.some((x) => {
+  const order = ['PENDING', 'APPROVED', 'CONFIRMED', 'ACTIVE', 'RETURN_REQUESTED', 'COMPLETED', 'COMPLETED_WITH_CLAIM'];
+  const currentIdx = order.indexOf(s);
+  const isDone = (statuses: string[]) => statuses.some((x) => {
     const checkIdx = order.indexOf(x);
-    return currentIdx > checkIdx && !isRejected;
+    return currentIdx > checkIdx && !isCancelled;
   });
-  const isCurrent    = (statuses: string[]) => statuses.includes(s);
+  const isCurrent = (statuses: string[]) => statuses.includes(s);
 
   return [
     {
@@ -377,11 +378,11 @@ export function buildBookingTimeline(booking: any): TimelineStep[] {
       label: '🛡️ Persetujuan Admin / Kepala',
       sublabel: 'Admin memverifikasi ketersediaan slot & kelayakan pemesanan',
       icon: <ShieldCheck size={15} />,
-      status: isRejected && isCurrent(['CANCELLED'])
+      status: isCancelled && !booking?.checkInTime
         ? 'rejected'
         : isCurrent(['PENDING'])
         ? 'active'
-        : isDone(['APPROVED','CONFIRMED','ACTIVE','COMPLETED']) || ['APPROVED','CONFIRMED','ACTIVE','COMPLETED'].includes(s)
+        : isDone(['PENDING']) || ['APPROVED','CONFIRMED','ACTIVE','RETURN_REQUESTED','COMPLETED','COMPLETED_WITH_CLAIM'].includes(s)
         ? 'done'
         : 'pending',
       actor: undefined,
@@ -396,16 +397,14 @@ export function buildBookingTimeline(booking: any): TimelineStep[] {
         ? 'done'
         : p === 'REJECTED'
         ? 'rejected'
-        : ['PAID','DOWN_PAYMENT'].includes(p) || isCurrent(['CONFIRMED','ACTIVE','COMPLETED'])
+        : ['PAID','DOWN_PAYMENT','REFUNDED','CLAIMED'].includes(p) || p === 'PENDING_VERIFICATION' || isCurrent(['CONFIRMED','ACTIVE','RETURN_REQUESTED','COMPLETED','COMPLETED_WITH_CLAIM'])
         ? 'done'
-        : p === 'PENDING_VERIFICATION'
-        ? 'active'
         : isCurrent(['APPROVED'])
         ? 'active'
         : 'pending',
       actor: isFree ? 'Sistem Otomatis (SPASI)' : (booking?.renter?.name || undefined),
       timestamp: booking?.paidAt || undefined,
-      notes: isFree ? 'Bebas biaya sewa & jaminan deposit' : (p === 'REJECTED' ? 'Struk pembayaran ditolak (tidak valid/palsu)' : p === 'PENDING_VERIFICATION' ? 'Menunggu verifikasi Admin...' : undefined),
+      notes: isFree ? 'Bebas biaya sewa & jaminan deposit' : (p === 'REJECTED' ? 'Struk pembayaran ditolak (tidak valid/palsu)' : p === 'PENDING_VERIFICATION' ? 'Bukti telah diunggah, menunggu verifikasi Admin' : undefined),
     },
     {
       key: 'payment_verify',
@@ -413,8 +412,8 @@ export function buildBookingTimeline(booking: any): TimelineStep[] {
       sublabel: isFree ? 'Reservasi otomatis dikonfirmasi setelah disetujui Admin.' : 'Admin memverifikasi keabsahan struk transfer & menerbitkan E-Voucher',
       icon: <ShieldCheck size={15} />,
       status: isFree
-        ? (s !== 'PENDING' ? 'done' : 'pending')
-        : (['CONFIRMED','ACTIVE','COMPLETED'].includes(s) && ['PAID','DOWN_PAYMENT'].includes(p))
+        ? (s !== 'PENDING' && !isCancelled ? 'done' : 'pending')
+        : (['CONFIRMED','ACTIVE','RETURN_REQUESTED','COMPLETED','COMPLETED_WITH_CLAIM'].includes(s) && ['PAID','DOWN_PAYMENT','REFUNDED','CLAIMED'].includes(p))
         ? 'done'
         : p === 'PENDING_VERIFICATION'
         ? 'active'
@@ -424,30 +423,30 @@ export function buildBookingTimeline(booking: any): TimelineStep[] {
     },
     {
       key: 'checkin',
-      label: '🔑 Check-In & Pemakaian Ruangan Dimulai',
+      label: '🔑 Check-In & Pemakaian Dimulai',
       sublabel: 'Petugas & penyewa melakukan cek fisik ruangan & fasilitas sebelum sesi',
       icon: <Home size={15} />,
-      status: isCurrent(['ACTIVE','RETURN_REQUESTED'])
+      status: isCurrent(['ACTIVE','RETURN_REQUESTED','COMPLETED','COMPLETED_WITH_CLAIM'])
         ? 'done'
         : isCurrent(['CONFIRMED'])
         ? 'active'
-        : isDone(['ACTIVE','COMPLETED'])
+        : isDone(['CONFIRMED'])
         ? 'done'
         : 'pending',
-      timestamp: booking?.checkedInAt || booking?.startTime || undefined,
+      timestamp: booking?.checkInTime || undefined,
     },
     {
       key: 'active',
       label: '⏳ Sesi Berlangsung',
-      sublabel: 'Ruangan sedang digunakan oleh penyewa',
+      sublabel: 'Ruangan / peralatan sedang digunakan oleh penyewa',
       icon: <Truck size={15} />,
       status: isCurrent(['ACTIVE'])
         ? 'active'
-        : isCurrent(['RETURN_REQUESTED','COMPLETED'])
+        : isCurrent(['RETURN_REQUESTED','COMPLETED','COMPLETED_WITH_CLAIM'])
         ? 'done'
         : 'pending',
       actor: booking?.renter?.name || undefined,
-      timestamp: booking?.startTime || undefined,
+      timestamp: booking?.checkInTime || booking?.startTime || undefined,
     },
     {
       key: 'return_req',
@@ -456,7 +455,7 @@ export function buildBookingTimeline(booking: any): TimelineStep[] {
       icon: <PhoneCall size={15} />,
       status: isCurrent(['RETURN_REQUESTED'])
         ? 'active'
-        : isCurrent(['COMPLETED'])
+        : isCompleted
         ? 'done'
         : 'pending',
       timestamp: booking?.returnRequestedAt || undefined,
@@ -466,27 +465,31 @@ export function buildBookingTimeline(booking: any): TimelineStep[] {
       label: '🔍 Inspeksi & Check-Out (Petugas)',
       sublabel: 'Petugas memeriksa kondisi fasilitas, menghitung deposit & klaim kerusakan',
       icon: <Wrench size={15} />,
-      status: isCurrent(['COMPLETED'])
+      status: isCompleted
         ? 'done'
+        : isCurrent(['RETURN_REQUESTED'])
+        ? 'active'
         : 'pending',
-      timestamp: booking?.checkedOutAt || undefined,
+      timestamp: booking?.checkOutTime || undefined,
     },
     {
       key: 'completed',
-      label: isRejected
+      label: isCancelled
         ? '❌ Booking Dibatalkan / Ditolak'
+        : s === 'COMPLETED_WITH_CLAIM'
+        ? '⚠️ Sesi Selesai dengan Klaim Kerusakan'
         : '✅ Sesi Selesai & Deposit Diselesaikan',
-      sublabel: isRejected
+      sublabel: isCancelled
         ? 'Transaksi tidak dapat dilanjutkan'
         : 'Transaksi tercatat & deposit dikembalikan/diklaim sesuai kondisi',
-      icon: isRejected ? <XCircle size={15} /> : <CheckCircle2 size={15} />,
-      status: isRejected
+      icon: isCancelled ? <XCircle size={15} /> : <CheckCircle2 size={15} />,
+      status: isCancelled
         ? 'rejected'
-        : isCurrent(['COMPLETED'])
+        : isCompleted
         ? 'done'
         : 'pending',
       actor: 'Sistem Otomatis (SPASI)',
-      timestamp: booking?.completedAt || booking?.endTime || undefined,
+      timestamp: booking?.checkOutTime || (isCompleted ? booking?.endTime : undefined),
     },
   ];
 }

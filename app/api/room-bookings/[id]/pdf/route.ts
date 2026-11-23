@@ -37,10 +37,46 @@ export async function GET(request: Request, { params }: { params: { id: string }
 
     const isBAST = type === 'BAST';
     const docTitle = isBAST ? 'BERITA ACARA SERAH TERIMA (BAST)' : 'KUITANSI & INVOICE PEMBAYARAN';
-    const grandTotal = (booking.totalAmount || 0) + (booking.overtimeFee || 0);
+    const grandTotal = (booking.totalAmount || 0) + (booking.depositAmount || 0) + (booking.overtimeFee || 0);
 
     let handoverHtml = '';
-    if (isBAST && booking.handoverLog) {
+    if (isBAST && Array.isArray(booking.inspections) && booking.inspections.length > 0) {
+      handoverHtml = `
+    <!-- HASIL INSPEKSI SERAH TERIMA -->
+    <div class="section-title">Berita Acara Pemeriksaan Fisik &amp; Fasilitas (Check-In / Check-Out)</div>
+    <table class="items-table" style="margin-bottom:24px;">
+      <thead>
+        <tr>
+          <th style="width:40px; background:#475569;">No</th>
+          <th style="width:95px; background:#475569;">Tahap</th>
+          <th style="background:#475569;">Fasilitas / Aset</th>
+          <th style="width:120px; text-align:center; background:#475569;">Kondisi</th>
+          <th style="width:120px; text-align:center; background:#475569;">Petugas &amp; Waktu</th>
+          <th style="background:#475569;">Catatan</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${booking.inspections.map((ins: any, idx: number) => {
+          const cond = ins.type === 'CHECK_IN' ? (ins.conditionBefore || 'Baik') : (ins.conditionAfter || 'Baik');
+          const statusFlag = ins.isMissing
+            ? '<span style="color:#b91c1c;font-weight:700;">HILANG</span>'
+            : ins.isDamaged
+            ? `<span style="color:#b91c1c;font-weight:700;">${cond}</span>`
+            : `<span style="color:#10b981;font-weight:700;">${cond}</span>`;
+          return `
+          <tr>
+            <td style="text-align:center">${idx + 1}</td>
+            <td style="font-weight:700">${ins.type === 'CHECK_IN' ? 'Check-In' : 'Check-Out'}</td>
+            <td><strong>${ins.assetName || '-'}</strong></td>
+            <td style="text-align:center">${statusFlag}</td>
+            <td style="font-size:11px;">${ins.inspectedBy || '-'}<br/>${formatDate(ins.timestamp, 'dd MMM yyyy HH:mm')}</td>
+            <td>${ins.notes || '-'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+      `;
+    } else if (isBAST && booking.handoverLog) {
       let componentsList: any[] = [];
       try {
         componentsList = JSON.parse(booking.handoverLog.components || '[]');
@@ -303,7 +339,7 @@ export async function GET(request: Request, { params }: { params: { id: string }
       <tr>
         <td class="label">Ruangan / Venue</td>
         <td class="colon">:</td>
-        <td><strong>${booking.location.name}</strong> (${booking.location.building})</td>
+        <td><strong>${booking.location?.name || 'Paket Peralatan Sarpras'}</strong>${booking.location?.building ? ` (${booking.location.building})` : ''}</td>
         <td class="label">Tipe Sewa</td>
         <td class="colon">:</td>
         <td>${booking.rentalType === 'HOURLY' ? 'Per Jam' : 'Per Hari'}</td>
@@ -315,6 +351,14 @@ export async function GET(request: Request, { params }: { params: { id: string }
         <td class="label">Tanggal & Jam Selesai</td>
         <td class="colon">:</td>
         <td><strong>${formatDate(booking.endTime, 'dd MMMM yyyy, HH:mm')}</strong></td>
+      </tr>
+      <tr>
+        <td class="label">Waktu Check-In Aktual</td>
+        <td class="colon">:</td>
+        <td>${booking.checkInTime ? formatDate(booking.checkInTime, 'dd MMMM yyyy, HH:mm:ss') : 'Belum Check-In'}</td>
+        <td class="label">Waktu Check-Out Aktual</td>
+        <td class="colon">:</td>
+        <td>${booking.checkOutTime ? formatDate(booking.checkOutTime, 'dd MMMM yyyy, HH:mm:ss') : 'Belum Check-Out'}</td>
       </tr>
       <tr>
         <td class="label">Durasi</td>
@@ -347,16 +391,16 @@ export async function GET(request: Request, { params }: { params: { id: string }
         </tr>
       </thead>
       <tbody>
-        <tr>
+        ${booking.location ? `<tr>
           <td style="text-align:center">1</td>
           <td>Sewa ${booking.location.name} (${booking.location.building})</td>
           <td style="text-align:center">${booking.rentalType === 'HOURLY' ? `${booking.durationHours} Jam` : `${(booking as any).totalDays || 1} Hari`}</td>
           <td style="text-align:right">${formatCurrency(booking.roomRate)}</td>
           <td style="text-align:right">${formatCurrency(booking.roomSubtotal)}</td>
-        </tr>
+        </tr>` : ''}
         ${(booking.addonAssets || []).map((a: any, i: number) => `
         <tr>
-          <td style="text-align:center">${i + 2}</td>
+          <td style="text-align:center">${(booking.location ? i + 2 : i + 1)}</td>
           <td>Add-On: ${a.assetName}</td>
           <td style="text-align:center">${a.quantity} Unit</td>
           <td style="text-align:right">${formatCurrency(a.ratePerSession)}</td>

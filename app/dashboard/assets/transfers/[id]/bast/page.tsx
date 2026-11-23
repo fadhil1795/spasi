@@ -45,7 +45,9 @@ export default function TransferBASTPage() {
   const transferDate = new Date(transfer.transferredAt);
   const year = transferDate.getFullYear();
   const month = String(transferDate.getMonth() + 1).padStart(2, '0');
-  const bastNumber = `BAST-MUT/${year}/${month}/${transfer.id.slice(-6).toUpperCase()}`;
+  const bastNumber = transfer.transferNumber
+    ? `BAST-${transfer.transferNumber}`
+    : `BAST-MUT/${year}/${month}/${transfer.id.slice(-6).toUpperCase()}`;
 
   return (
     <div style={{ maxWidth: '900px', margin: '0 auto', paddingBottom: '3rem' }}>
@@ -183,8 +185,22 @@ export default function TransferBASTPage() {
                 <td style={{ padding: '0.6rem 0.75rem', fontWeight: 700, color: '#166534' }}>{asset.condition || 'Baik'}</td>
               </tr>
               <tr style={{ borderBottom: '1px solid #E5E7EB' }}>
-                <td style={{ padding: '0.6rem 0.75rem', fontWeight: 600, color: '#4B5563' }}>Unit / Jurusan Pemilik</td>
-                <td style={{ padding: '0.6rem 0.75rem' }}>{asset.department?.name || 'Milik Pusat Kampus'}</td>
+                <td style={{ padding: '0.6rem 0.75rem', fontWeight: 600, color: '#4B5563' }}>Mutasi Unit / Fakultas</td>
+                <td style={{ padding: '0.6rem 0.75rem' }}>
+                  {transfer.fromDepartment || asset.department?.name || 'Inventaris Pusat'} ➔ <strong>{transfer.toDepartment || asset.department?.name || 'Inventaris Pusat'}</strong>
+                </td>
+              </tr>
+              <tr style={{ borderBottom: '1px solid #E5E7EB', backgroundColor: '#F9FAFB' }}>
+                <td style={{ padding: '0.6rem 0.75rem', fontWeight: 600, color: '#4B5563' }}>Perubahan Penanggung Jawab (PIC)</td>
+                <td style={{ padding: '0.6rem 0.75rem' }}>
+                  {transfer.fromPicName || 'Petugas Asal'} ➔ <strong>{transfer.toPicName || asset.picName || 'Penanggung Jawab Baru'}</strong>
+                </td>
+              </tr>
+              <tr style={{ borderBottom: '1px solid #E5E7EB' }}>
+                <td style={{ padding: '0.6rem 0.75rem', fontWeight: 600, color: '#4B5563' }}>Status Persetujuan Mutasi</td>
+                <td style={{ padding: '0.6rem 0.75rem', fontWeight: 700 }}>
+                  {transfer.status || 'APPROVED'} {transfer.approvedBy ? `(Disetujui oleh: ${transfer.approvedBy})` : ''}
+                </td>
               </tr>
               <tr style={{ backgroundColor: '#F9FAFB' }}>
                 <td style={{ padding: '0.6rem 0.75rem', fontWeight: 600, color: '#4B5563' }}>Alasan Pemindahan</td>

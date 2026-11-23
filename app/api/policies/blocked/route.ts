@@ -66,7 +66,7 @@ export async function POST(request: Request) {
         conflicts: conflictingBookings.map(b => ({
           bookingNumber: b.bookingNumber,
           renterName: b.renter.name,
-          roomName: b.location.name,
+          roomName: b.location?.name || 'Paket Peralatan Sarpras',
           startTime: b.startTime,
           endTime: b.endTime
         }))

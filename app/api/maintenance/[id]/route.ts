@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getAuthSession } from '@/lib/auth';
+import { recordAuditLog } from '@/lib/audit';
 
 export const dynamic = 'force-dynamic';
 
@@ -117,6 +118,16 @@ export async function PATCH(request: Request, { params }: { params: { id: string
         });
       }
     }
+
+    await recordAuditLog({
+      action: 'UPDATE_MAINTENANCE',
+      entity: 'Maintenance',
+      entityId: params.id,
+      userId: (session.user as any).id,
+      details: `Memperbarui status maintenance "${existing.description}" menjadi ${updated.status}`,
+      oldData: existing,
+      newData: updated,
+    });
 
     return NextResponse.json(updated);
   } catch (error) {
