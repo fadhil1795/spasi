@@ -172,6 +172,32 @@ export async function PUT(
           reason: body.transferReason || 'Perubahan penempatan / mutasi aset melalui sistem',
         },
       });
+
+      // Sinkronisasi RoomAssetAllocation jika lokasi ruangan berubah
+      if (locChanged) {
+        if (existing.locationId) {
+          await prisma.roomAssetAllocation.deleteMany({
+            where: { assetId: params.id, locationId: existing.locationId },
+          });
+        }
+        if (updatedAsset.locationId) {
+          await prisma.roomAssetAllocation.upsert({
+            where: {
+              locationId_assetId: {
+                locationId: updatedAsset.locationId,
+                assetId: params.id,
+              },
+            },
+            update: { quantity: updatedAsset.quantity || 1 },
+            create: {
+              locationId: updatedAsset.locationId,
+              assetId: params.id,
+              quantity: updatedAsset.quantity || 1,
+              notes: `Mutasi via Edit Aset`,
+            },
+          });
+        }
+      }
     }
 
     // Catat di AuditLog lengkap dengan perubahan data (A -> B)

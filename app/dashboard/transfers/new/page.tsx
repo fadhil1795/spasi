@@ -22,7 +22,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 
-export default function NewAssetTransferPage() {
+function NewAssetTransferForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const prefilledAssetId = searchParams.get('assetId') || '';
@@ -105,6 +105,7 @@ export default function NewAssetTransferPage() {
 
   const filteredAssets = useMemo(() => {
     return assets.filter((a) => {
+      if (a.status === 'DISPOSED') return false;
       if (categoryFilter !== 'ALL' && a.categoryId !== categoryFilter && a.category?.parentId !== categoryFilter) {
         return false;
       }
@@ -128,6 +129,77 @@ export default function NewAssetTransferPage() {
     () => assets.find((a) => a.id === form.assetId) || null,
     [assets, form.assetId]
   );
+
+  // Hitung perubahan secara real-time untuk ditampilkan di pratinjau form
+  const mutationDiff = useMemo(() => {
+    if (!selectedAsset) {
+      return {
+        isLocChanged: false,
+        isDeptChanged: false,
+        isPicChanged: false,
+        hasAnyChange: false,
+        fromLocText: '-',
+        toLocText: '-',
+        fromDeptText: '-',
+        toDeptText: '-',
+        fromPicText: '-',
+        toPicText: '-',
+      };
+    }
+
+    const currLocId = selectedAsset.locationId || 'NONE';
+    const nextLocId = form.toLocationId || 'NONE';
+    const isLocChanged = currLocId !== nextLocId;
+
+    const currDeptId = selectedAsset.departmentId || 'NONE';
+    const nextDeptId = form.toDepartmentId || 'NONE';
+    const isDeptChanged = currDeptId !== nextDeptId;
+
+    const fromPicText =
+      selectedAsset.picName ||
+      selectedAsset.location?.picName ||
+      selectedAsset.department?.headName ||
+      'Belum Ditentukan';
+
+    const targetLocObj = nextLocId !== 'NONE' ? locations.find((l) => l.id === nextLocId) : null;
+    const targetDeptObj = nextDeptId !== 'NONE' ? departments.find((d) => d.id === nextDeptId) : null;
+
+    const toPicText =
+      form.toPicName.trim() !== ''
+        ? form.toPicName.trim()
+        : targetLocObj?.picName || targetDeptObj?.headName || fromPicText;
+
+    const isPicChanged = toPicText !== fromPicText;
+
+    const fromLocText = selectedAsset.location
+      ? `${selectedAsset.location.name || selectedAsset.location.building}${selectedAsset.location.room ? ` (${selectedAsset.location.room})` : ''}`
+      : 'Gudang Utama / Tanpa Ruangan';
+
+    const toLocText = targetLocObj
+      ? `${targetLocObj.name || targetLocObj.building}${targetLocObj.room ? ` (${targetLocObj.room})` : ''}`
+      : 'Gudang Utama / Tanpa Ruangan';
+
+    const fromDeptText = selectedAsset.department
+      ? `[${selectedAsset.department.code}] ${selectedAsset.department.name}`
+      : 'Inventaris Pusat Instansi';
+
+    const toDeptText = targetDeptObj
+      ? `[${targetDeptObj.code}] ${targetDeptObj.name}`
+      : 'Inventaris Pusat Instansi';
+
+    return {
+      isLocChanged,
+      isDeptChanged,
+      isPicChanged,
+      hasAnyChange: isLocChanged || isDeptChanged || isPicChanged,
+      fromLocText,
+      toLocText,
+      fromDeptText,
+      toDeptText,
+      fromPicText,
+      toPicText,
+    };
+  }, [selectedAsset, form.toLocationId, form.toDepartmentId, form.toPicName, locations, departments]);
 
   const handleSelectAsset = (newAssetId: string) => {
     const ast = assets.find((a) => a.id === newAssetId);
@@ -437,6 +509,61 @@ export default function NewAssetTransferPage() {
               />
             </div>
 
+            {/* Pratinjau Ringkasan Perubahan Mutasi (Sebelum -> Sesudah) */}
+            {selectedAsset && (
+              <div
+                style={{
+                  padding: '1rem 1.25rem',
+                  borderRadius: 'var(--radius-md)',
+                  background: mutationDiff.hasAnyChange ? 'rgba(59, 130, 246, 0.06)' : 'rgba(245, 158, 11, 0.06)',
+                  border: mutationDiff.hasAnyChange
+                    ? '1px solid rgba(59, 130, 246, 0.25)'
+                    : '1px solid rgba(245, 158, 11, 0.3)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '0.65rem',
+                }}
+              >
+                <div style={{ fontSize: '0.82rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  <span>Ringkasan Perubahan Mutasi yang Akan Dicatat:</span>
+                  {!mutationDiff.hasAnyChange && (
+                    <span style={{ color: '#f59e0b', fontSize: '0.78rem' }}>
+                      ⚠️ Ubah minimal salah satu: Ruangan Tujuan, Unit Tujuan, atau Penanggung Jawab (PIC) Baru
+                    </span>
+                  )}
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem', fontSize: '0.8rem' }}>
+                  <div style={{ padding: '0.6rem 0.85rem', borderRadius: 'var(--radius-sm)', background: 'var(--color-surface)', border: mutationDiff.isLocChanged ? '1px solid var(--color-primary)' : '1px solid var(--color-border)' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: mutationDiff.isLocChanged ? 'var(--color-primary)' : 'var(--color-muted)' }}>
+                      1. Mutasi Antar-Ruangan ({mutationDiff.isLocChanged ? 'BERUBAH' : 'TETAP'})
+                    </div>
+                    <div style={{ marginTop: '0.2rem' }}>
+                      {mutationDiff.fromLocText} <ArrowRight size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> <strong>{mutationDiff.toLocText}</strong>
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '0.6rem 0.85rem', borderRadius: 'var(--radius-sm)', background: 'var(--color-surface)', border: mutationDiff.isDeptChanged ? '1px solid #10b981' : '1px solid var(--color-border)' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: mutationDiff.isDeptChanged ? '#10b981' : 'var(--color-muted)' }}>
+                      2. Mutasi Antar-Unit ({mutationDiff.isDeptChanged ? 'BERUBAH' : 'TETAP'})
+                    </div>
+                    <div style={{ marginTop: '0.2rem' }}>
+                      {mutationDiff.fromDeptText} <ArrowRight size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> <strong>{mutationDiff.toDeptText}</strong>
+                    </div>
+                  </div>
+
+                  <div style={{ padding: '0.6rem 0.85rem', borderRadius: 'var(--radius-sm)', background: 'var(--color-surface)', border: mutationDiff.isPicChanged ? '1px solid #3b82f6' : '1px solid var(--color-border)' }}>
+                    <div style={{ fontSize: '0.72rem', fontWeight: 700, color: mutationDiff.isPicChanged ? '#3b82f6' : 'var(--color-muted)' }}>
+                      3. Penanggung Jawab / PIC ({mutationDiff.isPicChanged ? 'BERUBAH' : 'TETAP'})
+                    </div>
+                    <div style={{ marginTop: '0.2rem' }}>
+                      {mutationDiff.fromPicText} <ArrowRight size={12} style={{ display: 'inline', verticalAlign: 'middle' }} /> <strong>{mutationDiff.toPicText}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {canApprove && (
               <label
                 style={{
@@ -473,7 +600,7 @@ export default function NewAssetTransferPage() {
               <Link href="/dashboard/transfers" className="btn btn-secondary">
                 Batal
               </Link>
-              <Button type="submit" variant="primary" isLoading={saving}>
+              <Button type="submit" variant="primary" isLoading={saving} disabled={!mutationDiff.hasAnyChange || saving}>
                 <CheckCircle2 size={17} />
                 {canApprove && form.autoApprove ? 'Simpan & Setujui Mutasi' : 'Kirim Permohonan Mutasi'}
               </Button>
@@ -482,5 +609,13 @@ export default function NewAssetTransferPage() {
         </form>
       )}
     </div>
+  );
+}
+
+export default function NewAssetTransferPage() {
+  return (
+    <React.Suspense fallback={<Skeleton height="420px" />}>
+      <NewAssetTransferForm />
+    </React.Suspense>
   );
 }

@@ -98,22 +98,43 @@ export async function PATCH(
       });
 
       if (action === 'APPROVE') {
-        const assetUpdateData: any = {};
-        if (existing.toLocationId !== undefined) {
-          assetUpdateData.locationId = existing.toLocationId;
-        }
-        if (existing.toDepartmentId !== undefined) {
-          assetUpdateData.departmentId = existing.toDepartmentId;
-        }
+        const assetUpdateData: any = {
+          locationId: existing.toLocationId ?? null,
+          departmentId: existing.toDepartmentId ?? null,
+        };
         if (existing.toPicName) {
           assetUpdateData.picName = existing.toPicName;
         }
 
-        if (Object.keys(assetUpdateData).length > 0) {
-          await tx.asset.update({
-            where: { id: existing.assetId },
-            data: assetUpdateData,
-          });
+        await tx.asset.update({
+          where: { id: existing.assetId },
+          data: assetUpdateData,
+        });
+
+        // Sinkronisasi RoomAssetAllocation agar Kartu Inventaris Ruangan (KIR) selalu akurat
+        if ((existing.fromLocationId || null) !== (existing.toLocationId || null)) {
+          if (existing.fromLocationId) {
+            await tx.roomAssetAllocation.deleteMany({
+              where: { assetId: existing.assetId, locationId: existing.fromLocationId },
+            });
+          }
+          if (existing.toLocationId) {
+            await tx.roomAssetAllocation.upsert({
+              where: {
+                locationId_assetId: {
+                  locationId: existing.toLocationId,
+                  assetId: existing.assetId,
+                },
+              },
+              update: { quantity: existing.asset?.quantity || 1 },
+              create: {
+                locationId: existing.toLocationId,
+                assetId: existing.assetId,
+                quantity: existing.asset?.quantity || 1,
+                notes: `Mutasi ${existing.transferNumber || existing.id}`,
+              },
+            });
+          }
         }
       }
 

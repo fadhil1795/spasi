@@ -90,44 +90,74 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Aset tidak ditemukan' }, { status: 404 });
     }
 
-    // Resolve target location & department
-    const targetLocation =
-      toLocationId && toLocationId !== 'NONE'
-        ? await prisma.location.findUnique({ where: { id: toLocationId } })
-        : null;
+    if (asset.status === 'DISPOSED') {
+      return NextResponse.json(
+        { error: 'Aset yang sudah dihapuskan (DISPOSED) tidak dapat dimutasi.' },
+        { status: 400 }
+      );
+    }
 
-    const targetDepartment =
-      toDepartmentId && toDepartmentId !== 'NONE'
-        ? await prisma.department.findUnique({ where: { id: toDepartmentId } })
-        : null;
+    // Cek apakah aset ini masih memiliki pengajuan mutasi PENDING yang belum diputuskan
+    const pendingTransfer = await prisma.transferLog.findFirst({
+      where: {
+        assetId: asset.id,
+        status: 'PENDING',
+      },
+    });
+
+    if (pendingTransfer) {
+      return NextResponse.json(
+        {
+          error: `Aset ini masih memiliki pengajuan mutasi (${pendingTransfer.transferNumber || pendingTransfer.id}) yang menunggu persetujuan. Selesaikan persetujuan tersebut terlebih dahulu.`,
+        },
+        { status: 409 }
+      );
+    }
+
+    const normalizedToLocationId =
+      toLocationId === undefined
+        ? asset.locationId
+        : toLocationId === 'NONE' || !toLocationId
+        ? null
+        : String(toLocationId);
+
+    const normalizedToDepartmentId =
+      toDepartmentId === undefined
+        ? asset.departmentId
+        : toDepartmentId === 'NONE' || !toDepartmentId
+        ? null
+        : String(toDepartmentId);
+
+    // Resolve target location & department
+    const targetLocation = normalizedToLocationId
+      ? await prisma.location.findUnique({ where: { id: normalizedToLocationId } })
+      : null;
+
+    const targetDepartment = normalizedToDepartmentId
+      ? await prisma.department.findUnique({ where: { id: normalizedToDepartmentId } })
+      : null;
 
     const fromLocationText = asset.location
       ? `${asset.location.name || asset.location.building}${asset.location.room ? ` (${asset.location.room})` : ''}`
       : 'Gudang Utama / Tanpa Ruangan';
 
-    const toLocationText =
-      toLocationId === undefined
-        ? fromLocationText
-        : targetLocation
-        ? `${targetLocation.name || targetLocation.building}${targetLocation.room ? ` (${targetLocation.room})` : ''}`
-        : 'Gudang Utama / Tanpa Ruangan';
+    const toLocationText = targetLocation
+      ? `${targetLocation.name || targetLocation.building}${targetLocation.room ? ` (${targetLocation.room})` : ''}`
+      : 'Gudang Utama / Tanpa Ruangan';
 
     const fromDeptText = asset.department ? `${asset.department.name} (${asset.department.code})` : 'Inventaris Pusat Instansi';
-    const toDeptText =
-      toDepartmentId === undefined
-        ? fromDeptText
-        : targetDepartment
-        ? `${targetDepartment.name} (${targetDepartment.code})`
-        : 'Inventaris Pusat Instansi';
+    const toDeptText = targetDepartment
+      ? `${targetDepartment.name} (${targetDepartment.code})`
+      : 'Inventaris Pusat Instansi';
 
     const fromPicText = asset.picName || asset.location?.picName || asset.department?.headName || 'Belum Ditentukan';
     const toPicText =
-      toPicName !== undefined && toPicName.trim() !== ''
-        ? toPicName.trim()
+      toPicName !== undefined && String(toPicName).trim() !== ''
+        ? String(toPicName).trim()
         : targetLocation?.picName || targetDepartment?.headName || fromPicText;
 
-    const isLocationChanged = toLocationId !== undefined && (toLocationId || null) !== (asset.locationId || null);
-    const isDeptChanged = toDepartmentId !== undefined && (toDepartmentId || null) !== (asset.departmentId || null);
+    const isLocationChanged = normalizedToLocationId !== (asset.locationId || null);
+    const isDeptChanged = normalizedToDepartmentId !== (asset.departmentId || null);
     const isPicChanged = toPicText !== fromPicText;
 
     if (!isLocationChanged && !isDeptChanged && !isPicChanged) {
@@ -152,11 +182,11 @@ export async function POST(request: Request) {
           transferNumber,
           assetId: asset.id,
           fromLocationId: asset.locationId,
-          toLocationId: toLocationId === 'NONE' ? null : (toLocationId !== undefined ? toLocationId : asset.locationId),
+          toLocationId: normalizedToLocationId,
           fromLocation: fromLocationText,
           toLocation: toLocationText,
           fromDepartmentId: asset.departmentId,
-          toDepartmentId: toDepartmentId === 'NONE' ? null : (toDepartmentId !== undefined ? toDepartmentId : asset.departmentId),
+          toDepartmentId: normalizedToDepartmentId,
           fromDepartment: fromDeptText,
           toDepartment: toDeptText,
           fromPicName: fromPicText,
@@ -182,11 +212,37 @@ export async function POST(request: Request) {
         await tx.asset.update({
           where: { id: asset.id },
           data: {
-            locationId: toLocationId === 'NONE' ? null : (toLocationId !== undefined ? toLocationId : asset.locationId),
-            departmentId: toDepartmentId === 'NONE' ? null : (toDepartmentId !== undefined ? toDepartmentId : asset.departmentId),
+            locationId: normalizedToLocationId,
+            departmentId: normalizedToDepartmentId,
             picName: toPicText,
           },
         });
+
+        // Sinkronisasi RoomAssetAllocation agar Kartu Inventaris Ruangan (KIR) selalu akurat
+        if (isLocationChanged) {
+          if (asset.locationId) {
+            await tx.roomAssetAllocation.deleteMany({
+              where: { assetId: asset.id, locationId: asset.locationId },
+            });
+          }
+          if (normalizedToLocationId) {
+            await tx.roomAssetAllocation.upsert({
+              where: {
+                locationId_assetId: {
+                  locationId: normalizedToLocationId,
+                  assetId: asset.id,
+                },
+              },
+              update: { quantity: asset.quantity || 1 },
+              create: {
+                locationId: normalizedToLocationId,
+                assetId: asset.id,
+                quantity: asset.quantity || 1,
+                notes: `Mutasi ${transferNumber}`,
+              },
+            });
+          }
+        }
       }
 
       return createdTransfer;

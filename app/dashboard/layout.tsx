@@ -60,6 +60,7 @@ export default function DashboardLayout({
         isPath('/dashboard/stock-opname') ||
         isPath('/dashboard/consumables') ||
         isPath('/dashboard/buildings') ||
+        isPath('/dashboard/transfers') ||
         isPath('/dashboard/brands') ||
         isPath('/dashboard/logs') ||
         (isPath('/dashboard/room-bookings') && !isRoomBookingDetail) ||
@@ -163,10 +164,16 @@ export default function DashboardLayout({
   return (
     <ToastProvider>
       <div style={{ display: 'flex', minHeight: '100vh', backgroundColor: 'var(--color-bg)' }}>
-        <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
+        <React.Suspense fallback={null}>
+          <Sidebar collapsed={collapsed} setCollapsed={setCollapsed} />
+        </React.Suspense>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <Topbar collapsed={collapsed} setCollapsed={setCollapsed} />
-          <main style={{ flex: 1, padding: '2rem 1.75rem' }}>{children}</main>
+          <main style={{ flex: 1, padding: '2rem 1.75rem' }}>
+            <React.Suspense fallback={<div style={{ padding: '2rem', color: 'var(--color-muted)' }}>Memuat halaman...</div>}>
+              {children}
+            </React.Suspense>
+          </main>
         </div>
       </div>
     </ToastProvider>

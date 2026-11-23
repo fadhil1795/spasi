@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAuthSession } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 import { sendWaMessage } from '@/lib/whatsapp';
 
 export async function POST(request: Request) {
@@ -21,12 +22,18 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Nomor telepon tujuan wajib diisi' }, { status: 400 });
     }
 
+    let resolvedApiKey = apiKey;
+    if (!resolvedApiKey || String(resolvedApiKey).startsWith('•')) {
+      const saved = await prisma.whatsAppSetting.findUnique({ where: { id: 'default' } });
+      resolvedApiKey = saved?.apiKey || '';
+    }
+
     const testMsg = `🔔 *[TES KONEKSI SPASI]*\n\nHalo!\nIni adalah pesan uji coba pengiriman dari Sistem Manajemen SPASI.\nKoneksi WhatsApp Gateway Anda dengan provider *${provider}* berhasil terhubung!\n\n_Tanggal: ${new Date().toLocaleString('id-ID')}_`;
 
     const res = await sendWaMessage(phone, testMsg, {
       provider,
       apiUrl,
-      apiKey,
+      apiKey: resolvedApiKey,
       instanceName,
       payloadTemplate,
       headers,

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
 
 export async function POST(req: Request) {
   try {
@@ -11,7 +12,13 @@ export async function POST(req: Request) {
 
     const { endpoint, bucket, accessKeyId, secretAccessKey, region, forcePathStyle } = await req.json();
 
-    if (!endpoint || !accessKeyId || !secretAccessKey) {
+    let resolvedSecret = secretAccessKey;
+    if (!resolvedSecret || String(resolvedSecret).startsWith('•')) {
+      const saved = await prisma.storageSetting.findUnique({ where: { id: 'default' } });
+      resolvedSecret = saved?.secretAccessKey || '';
+    }
+
+    if (!endpoint || !accessKeyId || !resolvedSecret) {
       return NextResponse.json({ error: 'Endpoint, Access Key, dan Secret Key harus diisi' }, { status: 400 });
     }
 
@@ -21,7 +28,7 @@ export async function POST(req: Request) {
       const client = new S3Client({
         endpoint,
         region: region || 'us-east-1',
-        credentials: { accessKeyId, secretAccessKey },
+        credentials: { accessKeyId, secretAccessKey: resolvedSecret },
         forcePathStyle: forcePathStyle ?? true,
       });
 
