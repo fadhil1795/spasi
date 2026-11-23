@@ -44,7 +44,7 @@ export default function DashboardCatalogPage() {
     try {
       setLoading(true);
       const [roomsRes, assetsRes, catsRes, brandsRes] = await Promise.all([
-        fetch('/api/rooms?status=AVAILABLE'),
+        fetch('/api/rooms?status=AVAILABLE&bookableOnly=true'),
         fetch('/api/public/assets?status=AVAILABLE'),
         fetch('/api/public/categories'),
         fetch('/api/brands?detail=true'),
@@ -123,6 +123,7 @@ export default function DashboardCatalogPage() {
   const buildings = Array.from(new Set(rooms.map((r) => r.building).filter(Boolean)));
 
   const filteredRooms = rooms.filter((r) => {
+    if (!r.isLoanable && !r.isRentable) return false;
     const matchesSearch = r.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           r.code?.toLowerCase().includes(searchQuery.toLowerCase()) ||
                           r.building?.toLowerCase().includes(searchQuery.toLowerCase());

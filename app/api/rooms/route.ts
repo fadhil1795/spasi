@@ -14,22 +14,40 @@ export async function GET(request: Request) {
     const building = searchParams.get('building');
     const buildingId = searchParams.get('buildingId');
     const roomType = searchParams.get('roomType');
+    const bookableOnly = searchParams.get('bookableOnly');
     const q = searchParams.get('q');
 
+    const andConditions: any[] = [];
     const where: any = {};
     if (status && status !== 'ALL') where.status = status;
     if (building && building !== 'ALL') where.building = building;
     if (buildingId && buildingId !== 'ALL') where.buildingId = buildingId;
     if (roomType && roomType !== 'ALL') where.roomType = roomType;
     if (minCapacity) where.capacity = { gte: parseInt(minCapacity) };
+
+    if (bookableOnly === 'true') {
+      andConditions.push({
+        OR: [{ isLoanable: true }, { isRentable: true }],
+      });
+      if (!status || status === 'ALL') {
+        andConditions.push({ status: { not: 'INACTIVE' } });
+      }
+    }
+
     if (q) {
-      where.OR = [
-        { name: { contains: q } },
-        { code: { contains: q } },
-        { building: { contains: q } },
-        { room: { contains: q } },
-        { picName: { contains: q } },
-      ];
+      andConditions.push({
+        OR: [
+          { name: { contains: q } },
+          { code: { contains: q } },
+          { building: { contains: q } },
+          { room: { contains: q } },
+          { picName: { contains: q } },
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      where.AND = andConditions;
     }
 
     const rooms = await prisma.location.findMany({

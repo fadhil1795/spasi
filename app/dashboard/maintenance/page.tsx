@@ -84,7 +84,7 @@ export default function PremiumMaintenancePage() {
       const [resM, resS, resA, resR, resC] = await Promise.all([
         fetch('/api/maintenance'),
         fetch('/api/maintenance/schedules'),
-        fetch('/api/public/assets'),
+        fetch('/api/public/assets?includeInternal=true'),
         fetch('/api/rooms'),
         fetch('/api/categories'),
       ]);

@@ -125,6 +125,9 @@ export default function DashboardPage() {
   const { totalItemCount } = useCart();
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [dashboardTab, setDashboardTab] = useState<'overview' | 'recap'>('overview');
+  const [recapGroupMode, setRecapGroupMode] = useState<'parent' | 'sub' | 'unit'>('parent');
+  const [recapSearch, setRecapSearch] = useState('');
 
   const userRole = (session?.user as any)?.role || 'BORROWER';
 
@@ -631,6 +634,56 @@ export default function DashboardPage() {
   const deptDist: any[] = data?.departmentDistribution || [];
   const newestAssets: any[] = data?.newestAssets || [];
   const problematicAssets: any[] = data?.problematicAssets || [];
+  const classificationRecap: any[] = data?.classificationRecap || [];
+  const subClassificationRecap: any[] = data?.subClassificationRecap || [];
+  const unitRecap: any[] = data?.unitRecap || [];
+
+  const activeRecapRows: any[] = (
+    recapGroupMode === 'parent'
+      ? classificationRecap
+      : recapGroupMode === 'sub'
+      ? subClassificationRecap
+      : unitRecap
+  ).filter((r: any) => {
+    if (!recapSearch.trim()) return true;
+    const q = recapSearch.toLowerCase();
+    return (
+      r.name?.toLowerCase().includes(q) ||
+      r.code?.toLowerCase().includes(q) ||
+      (r.parentName && r.parentName.toLowerCase().includes(q))
+    );
+  });
+
+  const recapTotals = activeRecapRows.reduce(
+    (acc, r) => ({
+      totalAssets: acc.totalAssets + (r.totalAssets || 0),
+      totalUnits: acc.totalUnits + (r.totalUnits || 0),
+      activeCount: acc.activeCount + (r.activeCount || 0),
+      activeUnits: acc.activeUnits + (r.activeUnits || 0),
+      borrowedOrRentedCount: acc.borrowedOrRentedCount + (r.borrowedOrRentedCount || 0),
+      maintenanceCount: acc.maintenanceCount + (r.maintenanceCount || 0),
+      conditionBaikCount: acc.conditionBaikCount + (r.conditionBaikCount || 0),
+      conditionRusakRinganCount: acc.conditionRusakRinganCount + (r.conditionRusakRinganCount || 0),
+      conditionRusakBeratCount: acc.conditionRusakBeratCount + (r.conditionRusakBeratCount || 0),
+      totalDamagedCount: acc.totalDamagedCount + (r.totalDamagedCount || 0),
+      disposedCount: acc.disposedCount + (r.disposedCount || 0),
+      totalValue: acc.totalValue + (r.totalValue || 0),
+    }),
+    {
+      totalAssets: 0,
+      totalUnits: 0,
+      activeCount: 0,
+      activeUnits: 0,
+      borrowedOrRentedCount: 0,
+      maintenanceCount: 0,
+      conditionBaikCount: 0,
+      conditionRusakRinganCount: 0,
+      conditionRusakBeratCount: 0,
+      totalDamagedCount: 0,
+      disposedCount: 0,
+      totalValue: 0,
+    }
+  );
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
@@ -672,6 +725,55 @@ export default function DashboardPage() {
             <Receipt size={18} /> Verifikasi Bayar
           </Link>
         </div>
+      </div>
+
+      {/* Menu Navigasi Internal Dashboard: Overview vs Rekap per Klasifikasi */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.75rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.85rem' }}>
+        <div style={{ display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setDashboardTab('overview')}
+            style={{
+              padding: '0.65rem 1.25rem',
+              borderRadius: 'var(--radius-md)',
+              fontWeight: 800,
+              fontSize: '0.88rem',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              border: dashboardTab === 'overview' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+              background: dashboardTab === 'overview' ? 'var(--color-primary)' : 'var(--color-surface)',
+              color: dashboardTab === 'overview' ? '#FFFFFF' : 'var(--color-text)',
+            }}
+          >
+            <BarChart2 size={16} /> Ringkasan &amp; Statistik Dashboard
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setDashboardTab('recap')}
+            style={{
+              padding: '0.65rem 1.25rem',
+              borderRadius: 'var(--radius-md)',
+              fontWeight: 800,
+              fontSize: '0.88rem',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              border: dashboardTab === 'recap' ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+              background: dashboardTab === 'recap' ? 'var(--color-primary)' : 'var(--color-surface)',
+              color: dashboardTab === 'recap' ? '#FFFFFF' : 'var(--color-text)',
+            }}
+          >
+            <FileSpreadsheet size={16} /> Rekapitulasi Aset per Klasifikasi (Aktif, Rusak, Maintenance, dll.)
+          </button>
+        </div>
+
+        <Link href="/dashboard/reports?tab=INVENTORY&sub=CATEGORY" className="btn btn-secondary btn-sm">
+          <FileSpreadsheet size={15} /> Cetak / Ekspor Excel Rekap Klasifikasi →
+        </Link>
       </div>
 
       {/* Primary KPI Cards */}
@@ -762,6 +864,179 @@ export default function DashboardPage() {
         })}
       </div>
 
+      {/* ── MENU REKAPITULASI ASET PER KLASIFIKASI DI DASHBOARD ── */}
+      <Card style={{ padding: '1.5rem', border: dashboardTab === 'recap' ? '1.5px solid var(--color-primary)' : undefined }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem' }}>
+          <div>
+            <h3 style={{ fontSize: '1.15rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.5rem', margin: 0 }}>
+              <FileSpreadsheet size={20} style={{ color: 'var(--color-primary)' }} />
+              Rekapitulasi Aset per Klasifikasi (Aktif, Dipinjam, Maintenance, Kondisi Baik &amp; Rusak)
+            </h3>
+            <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)', marginTop: '0.2rem' }}>
+              Rincian lengkap jumlah aset, unit fisik, status aktif/siap pakai, sedang dipinjam/sewa, sedang maintenance, hingga rincian kerusakan per klasifikasi.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+            {[
+              { id: 'parent' as const, label: `Per Klasifikasi Utama (${classificationRecap.length})` },
+              { id: 'sub' as const, label: `Per Sub-Klasifikasi Detail (${subClassificationRecap.length})` },
+              { id: 'unit' as const, label: `Per Unit / Fakultas (${unitRecap.length})` },
+            ].map((m) => (
+              <button
+                key={m.id}
+                type="button"
+                onClick={() => setRecapGroupMode(m.id)}
+                style={{
+                  padding: '0.45rem 0.85rem',
+                  borderRadius: 'var(--radius-sm)',
+                  fontSize: '0.78rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  border: recapGroupMode === m.id ? '1px solid var(--color-primary)' : '1px solid var(--color-border)',
+                  background: recapGroupMode === m.id ? 'rgba(228, 37, 44, 0.14)' : 'var(--color-surface2)',
+                  color: recapGroupMode === m.id ? 'var(--color-primary)' : 'var(--color-text)',
+                }}
+              >
+                {m.label}
+              </button>
+            ))}
+
+            <input
+              type="text"
+              className="input-field"
+              placeholder="Cari klasifikasi / kode..."
+              value={recapSearch}
+              onChange={(e) => setRecapSearch(e.target.value)}
+              style={{ width: '200px', height: '34px', fontSize: '0.8rem' }}
+            />
+          </div>
+        </div>
+
+        {loading ? (
+          <Skeleton height="220px" />
+        ) : activeRecapRows.length === 0 ? (
+          <div style={{ padding: '2.5rem', textAlign: 'center', color: 'var(--color-muted)', fontSize: '0.88rem' }}>
+            Tidak ada data klasifikasi yang sesuai pencarian.
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.83rem', textAlign: 'left' }}>
+              <thead>
+                <tr style={{ background: 'var(--color-surface2)', borderBottom: '1.5px solid var(--color-border)', color: 'var(--color-muted)', fontWeight: 700 }}>
+                  <th style={{ padding: '0.75rem 0.85rem' }}>Kode</th>
+                  <th style={{ padding: '0.75rem 0.85rem' }}>
+                    {recapGroupMode === 'parent' ? 'Nama Klasifikasi Utama' : recapGroupMode === 'sub' ? 'Sub-Klasifikasi & Induk' : 'Nama Unit / Fakultas'}
+                  </th>
+                  <th style={{ padding: '0.75rem 0.85rem', textAlign: 'center' }}>Total Aset</th>
+                  <th style={{ padding: '0.75rem 0.85rem', textAlign: 'center' }}>Unit Fisik</th>
+                  <th style={{ padding: '0.75rem 0.85rem', textAlign: 'center', color: '#10b981' }}>Aktif / Siap</th>
+                  <th style={{ padding: '0.75rem 0.85rem', textAlign: 'center', color: '#3b82f6' }}>Dipinjam / Sewa</th>
+                  <th style={{ padding: '0.75rem 0.85rem', textAlign: 'center', color: '#f59e0b' }}>Maintenance</th>
+                  <th style={{ padding: '0.75rem 0.85rem', textAlign: 'center', color: '#10b981' }}>Kondisi Baik</th>
+                  <th style={{ padding: '0.75rem 0.85rem', textAlign: 'center', color: '#f59e0b' }}>Rusak Ringan</th>
+                  <th style={{ padding: '0.75rem 0.85rem', textAlign: 'center', color: '#ef4444' }}>Rusak Berat</th>
+                  <th style={{ padding: '0.75rem 0.85rem', textAlign: 'center', color: '#6b7280' }}>Afkir / Disposed</th>
+                  <th style={{ padding: '0.75rem 0.85rem', textAlign: 'right' }}>Nilai Perolehan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activeRecapRows.map((r: any, idx: number) => (
+                  <tr
+                    key={r.id}
+                    style={{
+                      borderBottom: '1px solid var(--color-border)',
+                      background: idx % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.015)',
+                    }}
+                  >
+                    <td style={{ padding: '0.7rem 0.85rem', fontFamily: 'monospace', fontWeight: 800, color: 'var(--color-primary)' }}>
+                      {r.code}
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem' }}>
+                      <div style={{ fontWeight: 700, color: 'var(--color-text)' }}>{r.name}</div>
+                      {r.parentName && (
+                        <div style={{ fontSize: '0.73rem', color: 'var(--color-muted)' }}>Induk: {r.parentName}</div>
+                      )}
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem', textAlign: 'center', fontWeight: 800 }}>
+                      {r.totalAssets}
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem', textAlign: 'center', fontWeight: 700 }}>
+                      {r.totalUnits} Unit
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem', textAlign: 'center' }}>
+                      <span style={{ padding: '0.15rem 0.5rem', borderRadius: '999px', background: 'rgba(16,185,129,0.12)', color: '#10b981', fontWeight: 800 }}>
+                        {r.activeCount} ({r.activeUnits} u)
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem', textAlign: 'center', fontWeight: 700, color: r.borrowedOrRentedCount > 0 ? '#3b82f6' : 'var(--color-muted)' }}>
+                      {r.borrowedOrRentedCount}
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem', textAlign: 'center', fontWeight: 800, color: r.maintenanceCount > 0 ? '#f59e0b' : 'var(--color-muted)' }}>
+                      {r.maintenanceCount}
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem', textAlign: 'center', fontWeight: 700, color: '#10b981' }}>
+                      {r.conditionBaikCount}
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem', textAlign: 'center', fontWeight: 700, color: r.conditionRusakRinganCount > 0 ? '#f59e0b' : 'var(--color-muted)' }}>
+                      {r.conditionRusakRinganCount}
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem', textAlign: 'center', fontWeight: 800, color: r.conditionRusakBeratCount > 0 ? '#ef4444' : 'var(--color-muted)' }}>
+                      {r.conditionRusakBeratCount}
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem', textAlign: 'center', color: r.disposedCount > 0 ? '#ef4444' : 'var(--color-muted)' }}>
+                      {r.disposedCount}
+                    </td>
+                    <td style={{ padding: '0.7rem 0.85rem', textAlign: 'right', fontWeight: 700 }}>
+                      {formatCurrency(r.totalValue || 0)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: 'var(--color-surface2)', borderTop: '2px solid var(--color-border)', fontWeight: 800 }}>
+                  <td colSpan={2} style={{ padding: '0.8rem 0.85rem' }}>
+                    TOTAL KESELURUHAN ({activeRecapRows.length} Klasifikasi)
+                  </td>
+                  <td style={{ padding: '0.8rem 0.85rem', textAlign: 'center', color: 'var(--color-primary)' }}>
+                    {recapTotals.totalAssets}
+                  </td>
+                  <td style={{ padding: '0.8rem 0.85rem', textAlign: 'center' }}>
+                    {recapTotals.totalUnits} Unit
+                  </td>
+                  <td style={{ padding: '0.8rem 0.85rem', textAlign: 'center', color: '#10b981' }}>
+                    {recapTotals.activeCount} ({recapTotals.activeUnits} u)
+                  </td>
+                  <td style={{ padding: '0.8rem 0.85rem', textAlign: 'center', color: '#3b82f6' }}>
+                    {recapTotals.borrowedOrRentedCount}
+                  </td>
+                  <td style={{ padding: '0.8rem 0.85rem', textAlign: 'center', color: '#f59e0b' }}>
+                    {recapTotals.maintenanceCount}
+                  </td>
+                  <td style={{ padding: '0.8rem 0.85rem', textAlign: 'center', color: '#10b981' }}>
+                    {recapTotals.conditionBaikCount}
+                  </td>
+                  <td style={{ padding: '0.8rem 0.85rem', textAlign: 'center', color: '#f59e0b' }}>
+                    {recapTotals.conditionRusakRinganCount}
+                  </td>
+                  <td style={{ padding: '0.8rem 0.85rem', textAlign: 'center', color: '#ef4444' }}>
+                    {recapTotals.conditionRusakBeratCount}
+                  </td>
+                  <td style={{ padding: '0.8rem 0.85rem', textAlign: 'center', color: '#6b7280' }}>
+                    {recapTotals.disposedCount}
+                  </td>
+                  <td style={{ padding: '0.8rem 0.85rem', textAlign: 'right', color: '#10b981' }}>
+                    {formatCurrency(recapTotals.totalValue)}
+                  </td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {dashboardTab === 'overview' && (
+        <>
       {/* Distribusi Aset per Unit & Kondisi Fisik Aset */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1.5rem' }}>
         {/* Jumlah Aset Berdasarkan Kondisi */}
@@ -1123,6 +1398,8 @@ export default function DashboardPage() {
           <div style={{ padding: '3rem', textAlign: 'center', color: 'var(--color-muted)' }}>Belum ada data peminjaman dalam 6 bulan terakhir.</div>
         )}
       </Card>
+        </>
+      )}
     </div>
   );
 }

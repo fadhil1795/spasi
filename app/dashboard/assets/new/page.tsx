@@ -733,22 +733,23 @@ function NewAssetForm() {
                 value={formData.condition}
                 onChange={(e) => setFormData({ ...formData, condition: e.target.value })}
               >
-                <option value="Baik">Baik</option>
-                <option value="Sangat Baik">Sangat Baik</option>
-                <option value="Ada Minus">Ada Minus / Goresan</option>
+                <option value="Baik">Baik / Layak Pakai</option>
                 <option value="Rusak Ringan">Rusak Ringan</option>
+                <option value="Rusak Berat">Rusak Berat</option>
               </select>
             </div>
 
             <div>
-              <label style={labelStyle}>Status Aset Awal</label>
+              <label style={labelStyle}>Status Operasional Aset</label>
               <select
                 className="input-field"
                 value={formData.status}
                 onChange={(e) => setFormData({ ...formData, status: e.target.value })}
               >
-                <option value="AVAILABLE">Tersedia (AVAILABLE)</option>
-                <option value="MAINTENANCE">Dalam Perawatan (MAINTENANCE)</option>
+                <option value="AVAILABLE">AVAILABLE — Aktif / Tersedia</option>
+                <option value="INSTALLED">INSTALLED — Aktif Tertanam di Ruangan</option>
+                <option value="MAINTENANCE">MAINTENANCE — Sedang Perawatan / Servis</option>
+                <option value="DAMAGED">DAMAGED — Rusak</option>
               </select>
             </div>
           </div>

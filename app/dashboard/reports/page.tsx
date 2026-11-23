@@ -254,17 +254,21 @@ export default function ReportsPage() {
         'Total Nilai Buku (Rp)': u.totalBookValue,
       }));
     } else if (invSubTab === 'CATEGORY') {
-      sheetName = 'Aset_Per_Kategori';
+      sheetName = 'Aset_Per_Klasifikasi';
       rows = (invData.categoryReport || []).map((c: any, idx: number) => ({
         No: idx + 1,
-        'Kode Kategori': c.code,
-        'Kategori Utama': c.parentName,
-        'Nama Kategori / Subkategori': c.name,
+        'Kode Klasifikasi': c.code,
+        'Klasifikasi Utama': c.parentName,
+        'Nama Klasifikasi / Subkategori': c.name,
         'Jumlah Jenis Aset': c.assetTypesCount,
         'Total Unit Fisik': c.totalUnitsQty,
-        'Tersedia': c.availableQty,
-        'Kondisi Baik': c.baikCount,
-        'Kondisi Rusak': c.rusakCount,
+        'Aktif / Siap Pakai': c.activeCount || 0,
+        'Dipinjam / Disewa': c.borrowedOrRentedCount || 0,
+        'Sedang Maintenance': c.maintenanceCount || 0,
+        'Kondisi Baik': c.baikCount || 0,
+        'Rusak Ringan': c.rusakRinganCount || 0,
+        'Rusak Berat': c.rusakBeratCount || 0,
+        'Dihapuskan / Disposed': c.disposedCount || 0,
         'Nilai Perolehan (Rp)': c.totalAcquisitionValue,
         'Nilai Buku (Rp)': c.totalBookValue,
       }));
@@ -586,20 +590,20 @@ export default function ReportsPage() {
                 </Card>
               )}
 
-              {/* 2. LAPORAN ASET PER KATEGORI */}
+              {/* 2. LAPORAN ASET PER KATEGORI / KLASIFIKASI */}
               {invSubTab === 'CATEGORY' && (
                 <Card style={{ padding: '1.5rem' }}>
                   <div style={{ marginBottom: '1.25rem' }}>
-                    <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0 }}>2. Laporan Rekapitulasi Aset per Kategori &amp; Subkategori</h3>
+                    <h3 style={{ fontSize: '1.15rem', fontWeight: 800, margin: 0 }}>2. Laporan Rekapitulasi Aset per Klasifikasi (Kategori &amp; Subkategori)</h3>
                     <p style={{ fontSize: '0.82rem', color: 'var(--color-muted)', marginTop: '0.2rem' }}>
-                      Pengelompokan inventaris berdasarkan klasifikasi kategori, jumlah tersedia, kondisi fisik, dan nilai aset.
+                      Pengelompokan inventaris berdasarkan klasifikasi kategori, jumlah aktif/siap pakai, dipinjam/disewa, sedang maintenance, kondisi fisik, dan nilai aset.
                     </p>
                   </div>
                   <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.85rem' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.84rem' }}>
                       <thead>
                         <tr style={{ background: 'var(--color-surface2)' }}>
-                          {['Kode', 'Kategori Induk', 'Nama Kategori / Subkategori', 'Jenis Aset', 'Total Unit', 'Unit Tersedia', 'Kondisi Baik', 'Kondisi Rusak', 'Nilai Perolehan', 'Nilai Buku'].map((h) => (
+                          {['Kode', 'Klasifikasi Induk', 'Nama Klasifikasi / Subkategori', 'Jenis Aset', 'Total Unit', 'Aktif / Siap', 'Dipinjam / Sewa', 'Maintenance', 'Baik', 'Rusak Ringan', 'Rusak Berat', 'Disposed', 'Nilai Perolehan', 'Nilai Buku'].map((h) => (
                             <th key={h} style={{ padding: '0.75rem', textAlign: 'left', fontWeight: 700, borderBottom: '1.5px solid var(--color-border)' }}>{h}</th>
                           ))}
                         </tr>
@@ -607,14 +611,18 @@ export default function ReportsPage() {
                       <tbody>
                         {(invData?.categoryReport || []).map((c: any) => (
                           <tr key={c.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                            <td style={{ padding: '0.75rem', fontFamily: 'monospace', fontWeight: 800 }}>{c.code}</td>
+                            <td style={{ padding: '0.75rem', fontFamily: 'monospace', fontWeight: 800, color: 'var(--color-primary)' }}>{c.code}</td>
                             <td style={{ padding: '0.75rem', color: 'var(--color-muted)' }}>{c.parentName}</td>
                             <td style={{ padding: '0.75rem', fontWeight: 700 }}>{c.name}</td>
                             <td style={{ padding: '0.75rem', fontWeight: 700 }}>{c.assetTypesCount}</td>
                             <td style={{ padding: '0.75rem', fontWeight: 800 }}>{c.totalUnitsQty}</td>
-                            <td style={{ padding: '0.75rem', color: '#3b82f6', fontWeight: 700 }}>{c.availableQty}</td>
+                            <td style={{ padding: '0.75rem', color: '#10b981', fontWeight: 800 }}>{c.activeCount || 0}</td>
+                            <td style={{ padding: '0.75rem', color: '#3b82f6', fontWeight: 700 }}>{c.borrowedOrRentedCount || 0}</td>
+                            <td style={{ padding: '0.75rem', color: '#f59e0b', fontWeight: 800 }}>{c.maintenanceCount || 0}</td>
                             <td style={{ padding: '0.75rem', color: '#10b981', fontWeight: 700 }}>{c.baikCount}</td>
-                            <td style={{ padding: '0.75rem', color: '#ef4444', fontWeight: 700 }}>{c.rusakCount}</td>
+                            <td style={{ padding: '0.75rem', color: '#f59e0b', fontWeight: 700 }}>{c.rusakRinganCount || 0}</td>
+                            <td style={{ padding: '0.75rem', color: '#ef4444', fontWeight: 800 }}>{c.rusakBeratCount || 0}</td>
+                            <td style={{ padding: '0.75rem', color: '#6b7280', fontWeight: 700 }}>{c.disposedCount || 0}</td>
                             <td style={{ padding: '0.75rem', fontWeight: 700 }}>{formatCurrency(c.totalAcquisitionValue)}</td>
                             <td style={{ padding: '0.75rem', fontWeight: 700, color: '#10b981' }}>{formatCurrency(c.totalBookValue)}</td>
                           </tr>

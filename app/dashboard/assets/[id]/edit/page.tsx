@@ -356,10 +356,29 @@ export default function EditAssetPage() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
             <div>
               <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-muted)' }}>
-                Kondisi Fisik
+                Status Operasional Aset *
+              </label>
+              <select
+                className="input-field"
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              >
+                <option value="AVAILABLE">AVAILABLE — Aktif / Tersedia Siap Pakai</option>
+                <option value="INSTALLED">INSTALLED — Aktif Tertanam di Ruangan</option>
+                <option value="BORROWED">BORROWED — Sedang Dipinjam</option>
+                <option value="RENTED">RENTED — Sedang Disewa</option>
+                <option value="MAINTENANCE">MAINTENANCE — Sedang Servis / Perawatan</option>
+                <option value="DAMAGED">DAMAGED — Rusak / Tidak Dapat Digunakan</option>
+                <option value="DISPOSED">DISPOSED — Dihapuskan / Afkir</option>
+              </select>
+            </div>
+
+            <div>
+              <label style={{ display: 'block', marginBottom: '0.4rem', fontSize: '0.85rem', fontWeight: 600, color: 'var(--color-muted)' }}>
+                Kondisi Fisik Aset *
               </label>
               <select
                 className="input-field"
@@ -619,7 +638,7 @@ export default function EditAssetPage() {
 
           <hr style={{ borderColor: 'var(--color-border)', margin: '0.5rem 0' }} />
 
-          <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Opsi Hak Akses Peminjaman & Penyewaan</h3>
+          <h3 style={{ fontSize: '1rem', fontWeight: 700 }}>Opsi Hak Akses Peminjaman, Penyewaan &amp; Katalog Publik</h3>
 
           <div style={{ display: 'flex', gap: '2rem', flexWrap: 'wrap' }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem' }}>
@@ -639,7 +658,22 @@ export default function EditAssetPage() {
               />
               Dapat Disewa Eksternal
             </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.9rem' }}>
+              <input
+                type="checkbox"
+                checked={formData.isFixedToRoom}
+                onChange={(e) => setFormData({ ...formData, isFixedToRoom: e.target.checked })}
+              />
+              Terikat / Tertanam di Ruangan (Fixed to Room)
+            </label>
           </div>
+
+          {!formData.isLoanable && !formData.isRentable && (
+            <div style={{ padding: '0.7rem 1rem', borderRadius: 'var(--radius-sm)', background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.3)', fontSize: '0.8rem', color: '#f59e0b' }}>
+              ℹ️ Karena <strong>Dapat Dipinjam Internal</strong> dan <strong>Dapat Disewa Eksternal</strong> keduanya tidak dicentang, aset ini otomatis menjadi <strong>Inventaris Internal</strong> dan tidak akan tampil di katalog halaman depan.
+            </div>
+          )}
 
           {formData.isRentable && (
             <Input

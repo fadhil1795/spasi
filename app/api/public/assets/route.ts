@@ -10,8 +10,11 @@ export async function GET(request: Request) {
     const parentCategoryId = searchParams.get('parentCategoryId');
     const status = searchParams.get('status');
     const isLoanableParam = searchParams.get('isLoanable');
+    const isRentableParam = searchParams.get('isRentable');
+    const includeInternal = searchParams.get('includeInternal');
     const q = searchParams.get('q');
 
+    const andConditions: any[] = [];
     const whereClause: any = {};
 
     if (categoryId && categoryId !== 'ALL') {
@@ -33,13 +36,29 @@ export async function GET(request: Request) {
     if (isLoanableParam === 'true') {
       whereClause.isLoanable = true;
     }
+    if (isRentableParam === 'true') {
+      whereClause.isRentable = true;
+    }
+
+    // Sembunyikan aset yang TIDAK bisa dipinjam dan TIDAK bisa disewa dari halaman depan/katalog publik
+    if (includeInternal !== 'true') {
+      andConditions.push({
+        OR: [{ isLoanable: true }, { isRentable: true }],
+      });
+    }
 
     if (q && q.trim()) {
-      whereClause.OR = [
-        { name: { contains: q.trim() } },
-        { code: { contains: q.trim() } },
-        { brand: { contains: q.trim() } },
-      ];
+      andConditions.push({
+        OR: [
+          { name: { contains: q.trim() } },
+          { code: { contains: q.trim() } },
+          { brand: { contains: q.trim() } },
+        ],
+      });
+    }
+
+    if (andConditions.length > 0) {
+      whereClause.AND = andConditions;
     }
 
     const startDateParam = searchParams.get('startDate');

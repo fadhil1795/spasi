@@ -301,6 +301,32 @@ export default function DashboardAssetsPage() {
     }
   };
 
+  // Handler Pengaturan Cepat Status & Kondisi Fisik Aset langsung dari Tabel
+  const handleQuickUpdateAsset = async (
+    assetId: string,
+    updates: { status?: string; condition?: string }
+  ) => {
+    try {
+      const res = await fetch(`/api/assets/${assetId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (res.ok) {
+        const updated = await res.json();
+        setAssets((prev) =>
+          prev.map((a) => (a.id === assetId ? { ...a, ...updates, status: updated.status, condition: updated.condition } : a))
+        );
+        showToast('Status / kondisi aset berhasil diperbarui!', 'success');
+      } else {
+        const err = await res.json();
+        showToast(err.error || 'Gagal memperbarui status aset', 'error');
+      }
+    } catch {
+      showToast('Terjadi kesalahan jaringan', 'error');
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
       {/* Header Halaman & Aksi Cepat */}
@@ -861,11 +887,33 @@ export default function DashboardAssetsPage() {
                         ) : (
                           <span style={{ fontSize: '0.75rem', color: 'var(--color-muted)' }}>-</span>
                         )}
-                        {ast.condition && (
-                          <div style={{ fontSize: '0.72rem', color: 'var(--color-muted)', marginTop: '0.25rem' }}>
-                            Kondisi: <strong>{ast.condition}</strong>
-                          </div>
-                        )}
+                        <div style={{ marginTop: '0.35rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                          <span style={{ fontSize: '0.7rem', color: 'var(--color-muted)' }}>Kondisi:</span>
+                          <select
+                            value={ast.condition || 'Baik'}
+                            onChange={(e) => handleQuickUpdateAsset(ast.id, { condition: e.target.value })}
+                            style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 700,
+                              padding: '0.12rem 0.4rem',
+                              borderRadius: '4px',
+                              border: '1px solid var(--color-border)',
+                              background: 'var(--color-surface2)',
+                              color:
+                                ast.condition === 'Rusak Berat'
+                                  ? '#ef4444'
+                                  : ast.condition === 'Rusak Ringan'
+                                  ? '#f59e0b'
+                                  : '#10b981',
+                              cursor: 'pointer',
+                            }}
+                            title="Ubah Cepat Kondisi Fisik Aset"
+                          >
+                            <option value="Baik">Baik</option>
+                            <option value="Rusak Ringan">Rusak Ringan</option>
+                            <option value="Rusak Berat">Rusak Berat</option>
+                          </select>
+                        </div>
                       </td>
 
                       {/* Lokasi / Ruang */}
@@ -904,9 +952,35 @@ export default function DashboardAssetsPage() {
                         )}
                       </td>
 
-                      {/* Status */}
+                      {/* Status (Dapat Diubah Cepat Langsung dari Tabel) */}
                       <td style={{ padding: '0.85rem 1rem' }}>
-                        <Badge status={ast.status} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', alignItems: 'flex-start' }}>
+                          <Badge status={ast.status} />
+                          <select
+                            value={ast.status || 'AVAILABLE'}
+                            onChange={(e) => handleQuickUpdateAsset(ast.id, { status: e.target.value })}
+                            style={{
+                              fontSize: '0.72rem',
+                              fontWeight: 600,
+                              padding: '0.15rem 0.4rem',
+                              borderRadius: '4px',
+                              border: '1px solid var(--color-border)',
+                              background: 'var(--color-surface2)',
+                              color: 'var(--color-text)',
+                              cursor: 'pointer',
+                              maxWidth: '140px',
+                            }}
+                            title="Ubah Cepat Status Operasional Aset"
+                          >
+                            <option value="AVAILABLE">Aktif / Tersedia</option>
+                            <option value="INSTALLED">Tertanam Ruang</option>
+                            <option value="BORROWED">Dipinjam</option>
+                            <option value="RENTED">Disewa</option>
+                            <option value="MAINTENANCE">Maintenance</option>
+                            <option value="DAMAGED">Rusak (Damaged)</option>
+                            <option value="DISPOSED">Afkir (Disposed)</option>
+                          </select>
+                        </div>
                       </td>
 
                       {/* Aksi */}

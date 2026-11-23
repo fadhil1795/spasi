@@ -190,15 +190,17 @@ export async function GET() {
         where: { createdAt: { gte: new Date(now.getFullYear(), now.getMonth() - 5, 1) } },
         select: { assetId: true, asset: { select: { name: true } } },
       }),
-      // All assets for valuation, condition, and department breakdown
+      // All assets for valuation, condition, classification, and department breakdown
       prisma.asset.findMany({
         select: {
           id: true,
           status: true,
           condition: true,
           quantity: true,
+          availableQty: true,
           purchaseCost: true,
           currentValue: true,
+          categoryId: true,
           departmentId: true,
         },
       }),
@@ -272,20 +274,118 @@ export async function GET() {
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
-    // Category distribution with names
-    const categoryIds = categoryGroups.map(g => g.categoryId).filter(Boolean) as string[];
-    const categories = await prisma.category.findMany({
-      where: { id: { in: categoryIds } },
-      select: { id: true, name: true },
+    // Category distribution with names & full hierarchy for classification recap
+    const allCategories = await prisma.category.findMany({
+      include: {
+        parent: { select: { id: true, code: true, name: true } },
+      },
+      orderBy: [{ parentId: 'asc' }, { name: 'asc' }],
     });
-    const catMap = Object.fromEntries(categories.map(c => [c.id, c.name]));
-    const categoryDistribution = categoryGroups.map(g => ({
+    const catMap = Object.fromEntries(allCategories.map((c) => [c.id, c.name]));
+    const categoryDistribution = categoryGroups.map((g) => ({
       name: catMap[g.categoryId ?? ''] || 'Lainnya',
       count: g._count.id,
     }));
 
     const cashIn = cashInAggr._sum.amount || 0;
     const cashOut = cashOutAggr._sum.amount || 0;
+
+    // Helper structure for per-classification metrics
+    interface RecapMetricRow {
+      id: string;
+      code: string;
+      name: string;
+      parentName?: string;
+      totalAssets: number;
+      totalUnits: number;
+      activeCount: number;
+      activeUnits: number;
+      borrowedOrRentedCount: number;
+      maintenanceCount: number;
+      damagedStatusCount: number;
+      disposedCount: number;
+      conditionBaikCount: number;
+      conditionRusakRinganCount: number;
+      conditionRusakBeratCount: number;
+      totalDamagedCount: number;
+      totalValue: number;
+    }
+
+    const createEmptyRecapRow = (id: string, code: string, name: string, parentName?: string): RecapMetricRow => ({
+      id,
+      code,
+      name,
+      parentName,
+      totalAssets: 0,
+      totalUnits: 0,
+      activeCount: 0,
+      activeUnits: 0,
+      borrowedOrRentedCount: 0,
+      maintenanceCount: 0,
+      damagedStatusCount: 0,
+      disposedCount: 0,
+      conditionBaikCount: 0,
+      conditionRusakRinganCount: 0,
+      conditionRusakBeratCount: 0,
+      totalDamagedCount: 0,
+      totalValue: 0,
+    });
+
+    const addAssetToRecapRow = (row: RecapMetricRow, ast: any) => {
+      const qty = ast.quantity || 1;
+      const acq = (ast.purchaseCost || 0) * qty;
+      const st = ast.status || 'AVAILABLE';
+      const cond = ast.condition || 'Baik';
+
+      row.totalAssets += 1;
+      row.totalUnits += qty;
+
+      if (st === 'AVAILABLE' || st === 'INSTALLED') {
+        row.activeCount += 1;
+        row.activeUnits += ast.availableQty ?? qty;
+      } else if (st === 'BORROWED' || st === 'RENTED') {
+        row.borrowedOrRentedCount += 1;
+      } else if (st === 'MAINTENANCE') {
+        row.maintenanceCount += 1;
+      } else if (st === 'DAMAGED') {
+        row.damagedStatusCount += 1;
+      } else if (st === 'DISPOSED') {
+        row.disposedCount += 1;
+      }
+
+      if (cond === 'Rusak Berat') {
+        row.conditionRusakBeratCount += 1;
+      } else if (cond === 'Rusak Ringan') {
+        row.conditionRusakRinganCount += 1;
+      } else {
+        row.conditionBaikCount += 1;
+      }
+
+      if (st === 'DAMAGED' || cond === 'Rusak Ringan' || cond === 'Rusak Berat') {
+        row.totalDamagedCount += 1;
+      }
+
+      if (st !== 'DISPOSED') {
+        row.totalValue += acq;
+      }
+    };
+
+    const parentClassMap: Record<string, RecapMetricRow> = {};
+    const subClassMap: Record<string, RecapMetricRow> = {};
+    const catById: Record<string, (typeof allCategories)[number]> = {};
+
+    for (const c of allCategories) {
+      catById[c.id] = c;
+      if (!c.parentId) {
+        parentClassMap[c.id] = createEmptyRecapRow(c.id, c.code || 'KAT', c.name);
+      }
+      subClassMap[c.id] = createEmptyRecapRow(
+        c.id,
+        c.code || 'SUB',
+        c.name,
+        c.parent ? `${c.parent.name} (${c.parent.code || '-'})` : 'Kategori Utama'
+      );
+    }
 
     // Valuation, condition, and unit/department aggregation
     let totalAssetAcquisitionValue = 0;
@@ -301,10 +401,13 @@ export async function GET() {
     };
 
     const deptMap: Record<string, { id: string; code: string; name: string; count: number; totalQty: number; totalValue: number }> = {};
+    const unitRecapMap: Record<string, RecapMetricRow> = {};
     for (const d of allDepartments) {
       deptMap[d.id] = { id: d.id, code: d.code, name: d.name, count: 0, totalQty: 0, totalValue: 0 };
+      unitRecapMap[d.id] = createEmptyRecapRow(d.id, d.code, d.name);
     }
     deptMap['CENTRAL'] = { id: 'CENTRAL', code: 'PUSAT', name: 'Inventaris Umum / Pusat Instansi', count: 0, totalQty: 0, totalValue: 0 };
+    unitRecapMap['CENTRAL'] = createEmptyRecapRow('CENTRAL', 'PUSAT', 'Inventaris Umum / Pusat Instansi');
 
     for (const ast of allAssetsForMetrics) {
       const qty = ast.quantity || 1;
@@ -338,10 +441,31 @@ export async function GET() {
       if (ast.status !== 'DISPOSED') {
         deptMap[dKey].totalValue += acq;
       }
+      addAssetToRecapRow(unitRecapMap[dKey], ast);
+
+      // Populate classification & sub-classification recaps
+      const catObj = catById[ast.categoryId];
+      if (catObj) {
+        if (subClassMap[catObj.id]) {
+          addAssetToRecapRow(subClassMap[catObj.id], ast);
+        }
+        const parentId = catObj.parentId || catObj.id;
+        if (!parentClassMap[parentId]) {
+          parentClassMap[parentId] = createEmptyRecapRow(
+            parentId,
+            catObj.parent?.code || catObj.code || 'KAT',
+            catObj.parent?.name || catObj.name
+          );
+        }
+        addAssetToRecapRow(parentClassMap[parentId], ast);
+      }
     }
 
     const conditionDistribution = Object.values(conditionMap);
     const departmentDistribution = Object.values(deptMap).filter((d) => d.count > 0 || d.id !== 'CENTRAL');
+    const classificationRecap = Object.values(parentClassMap).filter((r) => r.totalAssets > 0);
+    const subClassificationRecap = Object.values(subClassMap).filter((r) => r.totalAssets > 0);
+    const unitRecap = Object.values(unitRecapMap).filter((r) => r.totalAssets > 0 || r.id !== 'CENTRAL');
 
     return NextResponse.json({
       isBorrower: false,
@@ -371,6 +495,9 @@ export async function GET() {
       categoryDistribution,
       conditionDistribution,
       departmentDistribution,
+      classificationRecap,
+      subClassificationRecap,
+      unitRecap,
       newestAssets,
       problematicAssets,
     });

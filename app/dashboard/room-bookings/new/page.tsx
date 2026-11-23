@@ -230,7 +230,7 @@ function SinglePageSarprasBookingContent() {
         setLoadingAddOns(true);
         const [resQuota, resRooms, resPay, resCats, resAssets] = await Promise.all([
           fetch('/api/policies/quota?checkActive=true'),
-          fetch('/api/rooms?status=AVAILABLE'),
+          fetch('/api/rooms?status=AVAILABLE&bookableOnly=true'),
           fetch('/api/settings/payment'),
           fetch('/api/categories'),
           fetch('/api/public/assets?status=AVAILABLE'),

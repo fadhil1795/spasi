@@ -195,7 +195,7 @@ export async function GET(request: Request) {
       totalBookValue: 0,
     };
 
-    // 2. Rekap Laporan Aset per Kategori
+    // 2. Rekap Laporan Aset per Kategori / Klasifikasi
     const categoryMap: Record<
       string,
       {
@@ -206,8 +206,14 @@ export async function GET(request: Request) {
         assetTypesCount: number;
         totalUnitsQty: number;
         availableQty: number;
+        activeCount: number;
+        borrowedOrRentedCount: number;
+        maintenanceCount: number;
         baikCount: number;
+        rusakRinganCount: number;
+        rusakBeratCount: number;
         rusakCount: number;
+        disposedCount: number;
         totalAcquisitionValue: number;
         totalBookValue: number;
       }
@@ -222,8 +228,14 @@ export async function GET(request: Request) {
         assetTypesCount: 0,
         totalUnitsQty: 0,
         availableQty: 0,
+        activeCount: 0,
+        borrowedOrRentedCount: 0,
+        maintenanceCount: 0,
         baikCount: 0,
+        rusakRinganCount: 0,
+        rusakBeratCount: 0,
         rusakCount: 0,
+        disposedCount: 0,
         totalAcquisitionValue: 0,
         totalBookValue: 0,
       };
@@ -265,17 +277,30 @@ export async function GET(request: Request) {
 
       // Category
       if (categoryMap[ast.categoryId]) {
-        categoryMap[ast.categoryId].assetTypesCount += 1;
-        categoryMap[ast.categoryId].totalUnitsQty += qty;
-        categoryMap[ast.categoryId].availableQty += ast.availableQty || 0;
-        if (cond === 'Rusak Ringan' || cond === 'Rusak Berat' || ast.status === 'DAMAGED') {
-          categoryMap[ast.categoryId].rusakCount += 1;
+        const cm = categoryMap[ast.categoryId];
+        cm.assetTypesCount += 1;
+        cm.totalUnitsQty += qty;
+        cm.availableQty += ast.availableQty || 0;
+
+        if (ast.status === 'AVAILABLE' || ast.status === 'INSTALLED') cm.activeCount += 1;
+        else if (ast.status === 'BORROWED' || ast.status === 'RENTED') cm.borrowedOrRentedCount += 1;
+        else if (ast.status === 'MAINTENANCE') cm.maintenanceCount += 1;
+        else if (ast.status === 'DISPOSED') cm.disposedCount += 1;
+
+        if (cond === 'Rusak Berat') {
+          cm.rusakBeratCount += 1;
+          cm.rusakCount += 1;
+        } else if (cond === 'Rusak Ringan') {
+          cm.rusakRinganCount += 1;
+          cm.rusakCount += 1;
         } else {
-          categoryMap[ast.categoryId].baikCount += 1;
+          cm.baikCount += 1;
+          if (ast.status === 'DAMAGED') cm.rusakCount += 1;
         }
+
         if (ast.status !== 'DISPOSED') {
-          categoryMap[ast.categoryId].totalAcquisitionValue += acq;
-          categoryMap[ast.categoryId].totalBookValue += book;
+          cm.totalAcquisitionValue += acq;
+          cm.totalBookValue += book;
         }
       }
 

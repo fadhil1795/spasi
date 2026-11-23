@@ -23,7 +23,7 @@ export default function PublicRoomsPage() {
   const fetchRooms = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/rooms');
+      const res = await fetch('/api/rooms?bookableOnly=true');
       if (res.ok) setRooms(await res.json());
     } catch (e) {
       console.error(e);
@@ -33,6 +33,7 @@ export default function PublicRoomsPage() {
   };
 
   const filtered = rooms.filter((r) => {
+    if (!r.isLoanable && !r.isRentable) return false;
     const matchStatus = statusFilter === 'ALL' || r.status === statusFilter;
     const matchSearch = r.name.toLowerCase().includes(searchQuery.toLowerCase()) || (r.code && r.code.toLowerCase().includes(searchQuery.toLowerCase()));
     return matchStatus && matchSearch;

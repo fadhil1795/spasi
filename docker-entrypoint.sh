@@ -4,7 +4,7 @@ set -e
 # Sync database schema if DATABASE_URL is provided
 if [ "${AUTO_DB_PUSH:-true}" = "true" ] && [ -n "$DATABASE_URL" ]; then
   echo "🚀 [Dokploy] Running 'prisma db push' to ensure database tables exist..."
-  npx prisma db push --skip-generate || echo "⚠️ Warning: prisma db push failed or database is not reachable yet, continuing..."
+  npx prisma db push --skip-generate --accept-data-loss || echo "⚠️ Warning: prisma db push failed or database is not reachable yet, continuing..."
 fi
 
 # Optional seed if SEED_DB=true
