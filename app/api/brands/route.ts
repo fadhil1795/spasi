@@ -9,14 +9,14 @@ const DATA_DIR = path.join(process.cwd(), 'data');
 const BRANDS_FILE = path.join(DATA_DIR, 'custom_brands.json');
 
 // Katalog Merek Terstandarisasi Bawaan Industri per Kategori dan Subkategori
-export interface DefaultBrandEntry {
+interface DefaultBrandEntry {
   name: string;
   categoryCode: string;
   subCategoryCode?: string;
   description?: string;
 }
 
-export const STRUCTURED_DEFAULT_BRANDS: DefaultBrandEntry[] = [
+const STRUCTURED_DEFAULT_BRANDS: DefaultBrandEntry[] = [
   // --- ELEKTRONIK & MULTIMEDIA (ELK) ---
   // Subkategori: Jaringan & Komunikasi (NET)
   { name: 'Cisco', categoryCode: 'ELK', subCategoryCode: 'NET', description: 'Switch, Router & Perangkat Jaringan Enterprise' },
@@ -153,7 +153,7 @@ function ensureDataFile() {
   }
 }
 
-export interface CustomBrand {
+interface CustomBrand {
   id: string;
   name: string;
   categoryCode: string;

@@ -35,12 +35,13 @@ ENV HOSTNAME="0.0.0.0"
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Create uploads and cache directories with proper permissions
-RUN mkdir -p /app/public/uploads && \
+# Create uploads, data, and cache directories with proper permissions
+RUN mkdir -p /app/public/uploads /app/data && \
     chown -R nextjs:nodejs /app
 
 # Copy dependencies and prisma for db push / seeding support
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public

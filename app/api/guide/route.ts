@@ -5,13 +5,13 @@ import { getAuthSession } from '@/lib/auth';
 
 export const dynamic = 'force-dynamic';
 
-export interface GuideFeatureItem {
+interface GuideFeatureItem {
   iconName: string;
   title: string;
   desc: string;
 }
 
-export interface GuideStepItem {
+interface GuideStepItem {
   num: string;
   title: string;
   iconName: string;
@@ -19,12 +19,12 @@ export interface GuideStepItem {
   points: string[];
 }
 
-export interface GuideFaqItem {
+interface GuideFaqItem {
   q: string;
   a: string;
 }
 
-export interface GuideContentData {
+interface GuideContentData {
   heroBadge: string;
   heroTitle: string;
   heroHighlight: string;
@@ -43,7 +43,7 @@ export interface GuideContentData {
   updatedAt?: string;
 }
 
-export const DEFAULT_GUIDE_CONTENT: GuideContentData = {
+const DEFAULT_GUIDE_CONTENT: GuideContentData = {
   heroBadge: 'Panduan & Tata Cara Peminjaman',
   heroTitle: 'Panduan Penggunaan',
   heroHighlight: 'SPASI',
